@@ -41,9 +41,9 @@ option(GDAL_OBJECT_LIBRARIES_POSITION_INDEPENDENT_CODE "Set ON to produce -fPIC 
 option(CSHARP_MONO "Whether to force the C# compiler to be Mono" OFF)
 
 if (SSE2NEON_COMPILES)
-  option(GDAL_ENABLE_ARM_NEON_OPTIMIZATIONS "Set ON to use ARM Neon FPU optimizations" ON)
+  option(GDAL_ENABLE_ARM_NEON_OPTIMIZATIONS "Set ON to use Neon FPU optimizations on ARM or RVV optimizations on RISC-V" ON)
   if (GDAL_ENABLE_ARM_NEON_OPTIMIZATIONS)
-      message(STATUS "Using ARM Neon optimizations")
+      message(STATUS "Using sse2neon/sse2rvv optimizations")
   endif()
 endif()
 

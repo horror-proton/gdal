@@ -102,7 +102,7 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "(x86|AMD64)")
 
 else()
 
-  # Check ability to use Arm Neon optimizations
+  # Check ability to use Arm Neon or RVV optimizations
   include(CheckCXXSourceCompiles)
   include(CMakePushCheckState)
   cmake_push_check_state(RESET)

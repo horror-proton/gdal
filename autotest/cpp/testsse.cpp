@@ -1,5 +1,9 @@
 #include <stdio.h>
 
+#ifdef USE_NEON_OPTIMIZATIONS
+#define USE_SSE2
+#endif
+
 #include "gdalsse_priv.h"
 
 #define MY_ASSERT(x)                                                           \

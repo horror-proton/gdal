@@ -260,9 +260,15 @@ register_test(
   GDAL_RB_LOCK_TYPE
   SPIN)
 
-if ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "(x86_64|AMD64)" AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND HAVE_SSE_AT_COMPILE_TIME)
+if (("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "(x86_64|AMD64)"
+     AND CMAKE_SIZEOF_VOID_P EQUAL 8
+     AND HAVE_SSE_AT_COMPILE_TIME)
+    OR GDAL_ENABLE_ARM_NEON_OPTIMIZATIONS)
   gdal_test_target(testsse2 testsse.cpp)
   gdal_test_target(testsse2_emulation testsse.cpp)
+  if (GDAL_ENABLE_ARM_NEON_OPTIMIZATIONS)
+    target_compile_definitions(testsse2 PRIVATE -DUSE_NEON_OPTIMIZATIONS)
+  endif ()
   target_compile_definitions(testsse2_emulation PRIVATE -DUSE_SSE2_EMULATION -DNO_WARN_USE_SSE2_EMULATION)
   register_test(test-sse2 testsse2)
   register_test(test-sse2-emulation testsse2_emulation)

@@ -17,6 +17,7 @@
 #pragma GCC system_header
 #endif
 
+#ifdef __ARM_NEON__
 // This check is done in sse2neon.h just as a warning. Turn that into an
 // error, so that gdal.cmake doesn't try to use it
 #if !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 10
@@ -27,6 +28,14 @@
 
 #ifndef _MM_SHUFFLE2
 #define _MM_SHUFFLE2(fp1, fp0) (((fp1) << 1) | (fp0))
+#endif
+
+#elif defined(__riscv_vector)
+
+#include "sse2rvv.h"
+
+#else
+#error "sse2neon.h: Unsupported architecture"
 #endif
 
 #endif /* INCLUDE_SSE2NEON_H */
