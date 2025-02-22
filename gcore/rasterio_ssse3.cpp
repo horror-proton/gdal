@@ -278,8 +278,13 @@ void GDALDeinterleave4UInt16_SSSE3(const GUInt16* CPL_RESTRICT panSrc,
 
 inline __m128i loadu(const uint8_t *pSrc, size_t i, size_t srcStride)
 {
+#ifdef SSE2RVV_H
+    return __riscv_vreinterpret_i32m1(__riscv_vreinterpret_i8m1(
+        __riscv_vle8_v_u8m1(pSrc + i * srcStride, 16)));
+#else
     return _mm_loadu_si128(
         reinterpret_cast<const __m128i *>(pSrc + i * srcStride));
+#endif
 }
 
 /************************************************************************/
@@ -288,7 +293,13 @@ inline __m128i loadu(const uint8_t *pSrc, size_t i, size_t srcStride)
 
 inline void storeu(uint8_t *pDst, size_t i, size_t dstStride, __m128i reg)
 {
+#ifdef SSE2RVV_H
+    __riscv_vse8_v_u8m1(
+        pDst + i * dstStride,
+        __riscv_vreinterpret_u8m1(__riscv_vreinterpret_i8m1(reg)), 16);
+#else
     _mm_storeu_si128(reinterpret_cast<__m128i *>(pDst + i * dstStride), reg);
+#endif
 }
 
 /************************************************************************/
