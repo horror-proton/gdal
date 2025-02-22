@@ -4003,7 +4003,7 @@ CompositeSrcWithMaskIntoDest(const int nOutXSize, const int nOutYSize,
             {
                 // SSE2 version up to 6 times faster than portable version
                 const auto xmm_zero = _mm_setzero_si128();
-                constexpr int SIZEOF_REG = static_cast<int>(sizeof(xmm_zero));
+                constexpr int SIZEOF_REG = 16;
                 for (; iX + SIZEOF_REG <= nOutXSize; iX += SIZEOF_REG)
                 {
                     auto xmm_mask = _mm_loadu_si128(

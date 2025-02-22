@@ -71,7 +71,13 @@ static inline void GDALCopyXMMToInt16(const __m128i xmm, void *pDest)
 class XMMReg2Double
 {
   public:
+#ifdef SSE2RVV_H
+    using fixed_float64m1_t = __attribute__((
+        riscv_rvv_vector_bits(__riscv_v_fixed_vlen))) vfloat64m1_t;
+    fixed_float64m1_t xmm;
+#else
     __m128d xmm;
+#endif
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic push

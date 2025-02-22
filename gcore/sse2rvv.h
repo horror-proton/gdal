@@ -1473,7 +1473,10 @@ FORCE_INLINE __m128i _mm_cvtepu8_epi64(__m128i a) {
 
 // FORCE_INLINE __m64 _mm_cvtpd_pi32 (__m128d a) {}
 
-// FORCE_INLINE __m128 _mm_cvtpd_ps (__m128d a) {}
+FORCE_INLINE __m128 _mm_cvtpd_ps(__m128d a) {
+  // FIXME: the upper part is undefined, use __riscv_vmv_v ?
+  return __riscv_vlmul_ext_v_f32mf2_f32m1(__riscv_vfncvt_f_f_w_f32mf2(a, 2));
+}
 
 // FORCE_INLINE __m128 _mm_cvtpi16_ps (__m64 a) {}
 
@@ -1490,7 +1493,9 @@ FORCE_INLINE __m128i _mm_cvtps_epi32(__m128 a) {
   return vreinterpretq_i32_m128i(__riscv_vfcvt_x_f_v_i32m1(_a, 4));
 }
 
-// FORCE_INLINE __m128d _mm_cvtps_pd (__m128 a) {}
+FORCE_INLINE __m128d _mm_cvtps_pd(__m128 a) {
+  return __riscv_vfwcvt_f_f_v_f64m1(__riscv_vlmul_trunc_f32mf2(a), 2);
+}
 
 // FORCE_INLINE __m64 _mm_cvtps_pi16 (__m128 a) {}
 
@@ -1502,7 +1507,9 @@ FORCE_INLINE __m128i _mm_cvtps_epi32(__m128 a) {
 
 // FORCE_INLINE __m128 _mm_cvtpu8_ps (__m64 a) {}
 
-// FORCE_INLINE double _mm_cvtsd_f64 (__m128d a) {}
+FORCE_INLINE double _mm_cvtsd_f64(__m128d a) {
+  return __riscv_vfmv_f_s_f64m1_f64(a);
+}
 
 // FORCE_INLINE int _mm_cvtsd_si32 (__m128d a) {}
 
@@ -1512,21 +1519,33 @@ FORCE_INLINE __m128i _mm_cvtps_epi32(__m128 a) {
 
 // FORCE_INLINE __m128 _mm_cvtsd_ss (__m128 a, __m128d b) {}
 
-// FORCE_INLINE int _mm_cvtsi128_si32 (__m128i a) {}
+FORCE_INLINE int _mm_cvtsi128_si32(__m128i a) {
+  return __riscv_vmv_x_s_i32m1_i32(a);
+}
 
-// FORCE_INLINE __int64 _mm_cvtsi128_si64 (__m128i a) {}
+FORCE_INLINE __int64 _mm_cvtsi128_si64(__m128i a) {
+  return __riscv_vmv_x_s_i64m1_i64(__riscv_vreinterpret_v_i32m1_i64m1(a));
+}
 
 // FORCE_INLINE __int64 _mm_cvtsi128_si64x (__m128i a) {}
 
 // FORCE_INLINE __m128d _mm_cvtsi32_sd (__m128d a, int b) {}
 
-// FORCE_INLINE __m128i _mm_cvtsi32_si128 (int a) {}
+FORCE_INLINE __m128i _mm_cvtsi32_si128(int a) {
+  auto ret = __riscv_vmv_v_x_i32m1(0, 4);
+  ret = __riscv_vmv_v_x_i32m1_tu(ret, a, 1);
+  return ret;
+}
 
 // FORCE_INLINE __m128 _mm_cvtsi32_ss (__m128 a, int b) {}
 
 // FORCE_INLINE __m128d _mm_cvtsi64_sd (__m128d a, __int64 b) {}
 
-// FORCE_INLINE __m128i _mm_cvtsi64_si128 (__int64 a) {}
+FORCE_INLINE __m128i _mm_cvtsi64_si128(__int64 a) {
+  auto ret = __riscv_vmv_v_x_i64m1(0, 2);
+  ret = __riscv_vmv_v_x_i64m1_tu(ret, a, 1);
+  return __riscv_vreinterpret_i32m1(ret);
+}
 
 // FORCE_INLINE __m128 _mm_cvtsi64_ss (__m128 a, __int64 b) {}
 
@@ -1549,11 +1568,17 @@ FORCE_INLINE float _mm_cvtss_f32(__m128 a) {
 
 // FORCE_INLINE int _mm_cvtt_ss2si (__m128 a) {}
 
-// FORCE_INLINE __m128i _mm_cvttpd_epi32 (__m128d a) {}
+FORCE_INLINE __m128i _mm_cvttpd_epi32(__m128d a) {
+  // FIXME: the upper part is undefined, use __riscv_vmv_v ?
+  return __riscv_vlmul_ext_v_i32mf2_i32m1(
+      __riscv_vfncvt_rtz_x_f_w_i32mf2(a, 2));
+}
 
 // FORCE_INLINE __m64 _mm_cvttpd_pi32 (__m128d a) {}
 
-// FORCE_INLINE __m128i _mm_cvttps_epi32 (__m128 a) {}
+FORCE_INLINE __m128i _mm_cvttps_epi32(__m128 a) {
+  return __riscv_vfcvt_rtz_x_f_v_i32m1(a, 4);
+}
 
 // FORCE_INLINE __m64 _mm_cvttps_pi32 (__m128 a) {}
 

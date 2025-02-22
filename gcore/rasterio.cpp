@@ -6269,7 +6269,7 @@ void GDALExpandPackedBitsToByteAt0Or255(const GByte *CPL_RESTRICT pabyInput,
     const __m128i dispatch_two_bytes =
         _mm_set_epi8(1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0);
 #endif
-    constexpr size_t SSE_REG_SIZE = sizeof(bit_mask);
+    constexpr size_t SSE_REG_SIZE = 16;
     for (; iByte + SSE_REG_SIZE <= nInputWholeBytes; iByte += SSE_REG_SIZE)
     {
         __m128i reg_ori = _mm_loadu_si128(

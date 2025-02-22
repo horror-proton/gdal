@@ -369,7 +369,7 @@ inline size_t extremum_element_with_nan(const T *v, size_t size, T noDataValue)
     }
     size_t i = 1;
 
-    constexpr size_t VALS_PER_REG = sizeof(set1(extremum)) / sizeof(extremum);
+    constexpr size_t VALS_PER_REG = 16 / sizeof(extremum);
     constexpr int LOOP_UNROLLING = 4;
     // If changing the value, then we need to adjust the number of sse_valX
     // loading in the loop.
@@ -457,7 +457,7 @@ inline size_t extremum_element_with_nan(const T *v, size_t size, T noDataValue)
             // Replace all components that are at the nodata value by a
             // neutral value (current minimum)
             const auto replaceNoDataByNeutral =
-                [sse_neutral, sse_nodata](auto sse_val)
+                [&sse_neutral, &sse_nodata](auto sse_val)
             {
                 const auto eq_nodata = compeq<T>(sse_val, sse_nodata);
                 return blendv(sse_val, sse_neutral, eq_nodata);
