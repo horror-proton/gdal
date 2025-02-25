@@ -3217,7 +3217,9 @@ FORCE_INLINE void _mm_store_sd(double *mem_addr, __m128d a) {
 }
 
 FORCE_INLINE void _mm_store_si128(__m128i *mem_addr, __m128i a) {
-  *mem_addr = a;
+  __riscv_vse8(reinterpret_cast<int8_t *>(mem_addr),
+               __riscv_vreinterpret_i8m1(a), 16);
+  // *mem_addr = a;
 }
 
 FORCE_INLINE void _mm_store_ss(float *mem_addr, __m128 a) {
@@ -3247,7 +3249,9 @@ FORCE_INLINE void _mm_storeh_pi(__m64 *mem_addr, __m128 a) {
 }
 
 FORCE_INLINE void _mm_storel_epi64(__m128i *mem_addr, __m128i a) {
-  *mem_addr = a;
+  __riscv_vse8(reinterpret_cast<int8_t *>(mem_addr),
+               __riscv_vreinterpret_i8m1(a), 8);
+  // *mem_addr = a;
 }
 
 FORCE_INLINE void _mm_storel_pd(double *mem_addr, __m128d a) {
@@ -3288,7 +3292,9 @@ FORCE_INLINE void _mm_storeu_ps(float *mem_addr, __m128 a) {
 }
 
 FORCE_INLINE void _mm_storeu_si128(__m128i *mem_addr, __m128i a) {
-  *mem_addr = a;
+  __riscv_vse8(reinterpret_cast<int8_t *>(mem_addr),
+               __riscv_vreinterpret_i8m1(a), 16);
+  // *mem_addr = a;
 }
 
 FORCE_INLINE void _mm_storeu_si16(void *mem_addr, __m128i a) {
