@@ -2193,8 +2193,22 @@ static void inline GDALCopyWordsT(const Tin *const CPL_RESTRICT pSrcData,
                                   Tout *const CPL_RESTRICT pDstData,
                                   int nDstPixelStride, GPtrDiff_t nWordCount)
 {
-    GDALCopyWordsGenericT(pSrcData, nSrcPixelStride, pDstData, nDstPixelStride,
-                          nWordCount);
+#ifdef RASTERIO_RVV_HPP_INCLUDED
+    if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
+        nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
+    {
+        if constexpr (std::is_arithmetic_v<Tin> && std::is_arithmetic_v<Tout>)
+            rasterio_rvv::copy_words(pSrcData, pDstData, nWordCount);
+        else
+            GDALCopyWordsGenericT(pSrcData, nSrcPixelStride, pDstData,
+                                  nDstPixelStride, nWordCount);
+    }
+    else
+#endif
+    {
+        GDALCopyWordsGenericT(pSrcData, nSrcPixelStride, pDstData,
+                              nDstPixelStride, nWordCount);
+    }
 }
 
 template <class Tin, class Tout>
@@ -2236,6 +2250,7 @@ static void inline GDALCopyWordsT_8atatime(
     }
 }
 
+#ifndef RASTERIO_RVV_HPP_INCLUDED
 #ifdef HAVE_SSE2
 
 template <class Tout>
@@ -2250,10 +2265,6 @@ void GDALCopyWordsByteTo16Bit(const GByte *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(
-            pSrcData, reinterpret_cast<uint16_t *>(pDstData), nWordCount);
-#else
         decltype(nWordCount) n = 0;
         const __m128i xmm_zero = _mm_setzero_si128();
         GByte *CPL_RESTRICT pabyDstDataPtr =
@@ -2273,7 +2284,6 @@ void GDALCopyWordsByteTo16Bit(const GByte *const CPL_RESTRICT pSrcData,
         {
             pDstData[n] = pSrcData[n];
         }
-#endif
     }
     else
     {
@@ -2312,10 +2322,6 @@ void GDALCopyWordsByteTo32Bit(const GByte *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(
-            pSrcData, reinterpret_cast<uint32_t *>(pDstData), nWordCount);
-#else
         decltype(nWordCount) n = 0;
         const __m128i xmm_zero = _mm_setzero_si128();
         GByte *CPL_RESTRICT pabyDstDataPtr =
@@ -2343,7 +2349,6 @@ void GDALCopyWordsByteTo32Bit(const GByte *const CPL_RESTRICT pSrcData,
         {
             pDstData[n] = pSrcData[n];
         }
-#endif
     }
     else
     {
@@ -2378,9 +2383,6 @@ void GDALCopyWordsT(const GByte *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(pSrcData, pDstData, nWordCount);
-#else
         decltype(nWordCount) n = 0;
         const __m128i xmm_zero = _mm_setzero_si128();
         GByte *CPL_RESTRICT pabyDstDataPtr =
@@ -2412,7 +2414,6 @@ void GDALCopyWordsT(const GByte *const CPL_RESTRICT pSrcData,
         {
             pDstData[n] = pSrcData[n];
         }
-#endif
     }
     else
     {
@@ -2429,9 +2430,6 @@ void GDALCopyWordsT(const GByte *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(pSrcData, pDstData, nWordCount);
-#else
         decltype(nWordCount) n = 0;
         const __m128i xmm_zero = _mm_setzero_si128();
         GByte *CPL_RESTRICT pabyDstDataPtr =
@@ -2488,7 +2486,6 @@ void GDALCopyWordsT(const GByte *const CPL_RESTRICT pSrcData,
         {
             pDstData[n] = pSrcData[n];
         }
-#endif
     }
     else
     {
@@ -2505,9 +2502,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(pSrcData, pDstData, nWordCount);
-#else
         decltype(nWordCount) n = 0;
         // In SSE2, min_epu16 does not exist, so shift from
         // UInt16 to SInt16 to be able to use min_epi16
@@ -2529,7 +2523,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
             pDstData[n] =
                 pSrcData[n] >= 255 ? 255 : static_cast<GByte>(pSrcData[n]);
         }
-#endif
     }
     else
     {
@@ -2546,9 +2539,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(pSrcData, pDstData, nWordCount);
-#else
         decltype(nWordCount) n = 0;
         // In SSE2, min_epu16 does not exist, so shift from
         // UInt16 to SInt16 to be able to use min_epi16
@@ -2568,7 +2558,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
             pDstData[n] =
                 pSrcData[n] >= 32767 ? 32767 : static_cast<GInt16>(pSrcData[n]);
         }
-#endif
     }
     else
     {
@@ -2585,9 +2574,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(pSrcData, pDstData, nWordCount);
-#else
         decltype(nWordCount) n = 0;
         const __m128i xmm_zero = _mm_setzero_si128();
         GByte *CPL_RESTRICT pabyDstDataPtr =
@@ -2609,7 +2595,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
         {
             pDstData[n] = pSrcData[n];
         }
-#endif
     }
     else
     {
@@ -2626,9 +2611,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
-        rasterio_rvv::copy_words(pSrcData, pDstData, nWordCount);
-#else
         decltype(nWordCount) n = 0;
         const __m128i xmm_zero = _mm_setzero_si128();
         GByte *CPL_RESTRICT pabyDstDataPtr =
@@ -2663,7 +2645,6 @@ void GDALCopyWordsT(const GUInt16 *const CPL_RESTRICT pSrcData,
         {
             pDstData[n] = pSrcData[n];
         }
-#endif
     }
     else
     {
@@ -2709,6 +2690,7 @@ void GDALCopyWordsT(const float *const CPL_RESTRICT pSrcData,
     GDALCopyWordsT_8atatime(pSrcData, nSrcPixelStride, pDstData,
                             nDstPixelStride, nWordCount);
 }
+#endif // RASTERIO_RVV_HPP_INCLUDED
 
 /************************************************************************/
 /*                   GDALCopyWordsComplexT()                            */

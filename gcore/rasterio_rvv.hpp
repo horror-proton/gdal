@@ -21,7 +21,7 @@ using size_to_uint = std::conditional_t<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename T, size_t LOGM> struct rvv_helper;
+template <typename T, int LOGM> struct rvv_helper;
 
 #define RVV_HELPER(T, NAME, SIZE, EEW, EMUL, LOGM)                             \
     template <> struct rvv_helper<T, LOGM>                                     \
@@ -35,47 +35,99 @@ template <typename T, size_t LOGM> struct rvv_helper;
         {                                                                      \
             return __riscv_vle##SIZE##_v_##EEW##EMUL(ptr, vl);                 \
         }                                                                      \
+        template <typename Vsrc> static type reinterpret(Vsrc src)             \
+        {                                                                      \
+            return __riscv_vreinterpret_##EEW##EMUL(src);                      \
+        }                                                                      \
     }
 
+RVV_HELPER(uint8_t, uint8, 8, u8, mf8, -3);
+RVV_HELPER(uint8_t, uint8, 8, u8, mf4, -2);
+RVV_HELPER(uint8_t, uint8, 8, u8, mf2, -1);
 RVV_HELPER(uint8_t, uint8, 8, u8, m1, 0);
 RVV_HELPER(uint8_t, uint8, 8, u8, m2, 1);
 RVV_HELPER(uint8_t, uint8, 8, u8, m4, 2);
 RVV_HELPER(uint8_t, uint8, 8, u8, m8, 3);
 
+RVV_HELPER(int8_t, int8, 8, i8, mf8, -3);
+RVV_HELPER(int8_t, int8, 8, i8, mf4, -2);
+RVV_HELPER(int8_t, int8, 8, i8, mf2, -1);
+RVV_HELPER(int8_t, int8, 8, i8, m1, 0);
+RVV_HELPER(int8_t, int8, 8, i8, m2, 1);
+RVV_HELPER(int8_t, int8, 8, i8, m4, 2);
+RVV_HELPER(int8_t, int8, 8, i8, m8, 3);
+
+RVV_HELPER(uint16_t, uint16, 16, u16, mf4, -2);
+RVV_HELPER(uint16_t, uint16, 16, u16, mf2, -1);
 RVV_HELPER(uint16_t, uint16, 16, u16, m1, 0);
 RVV_HELPER(uint16_t, uint16, 16, u16, m2, 1);
 RVV_HELPER(uint16_t, uint16, 16, u16, m4, 2);
 RVV_HELPER(uint16_t, uint16, 16, u16, m8, 3);
 
+RVV_HELPER(int16_t, int16, 16, i16, mf4, -2);
+RVV_HELPER(int16_t, int16, 16, i16, mf2, -1);
+RVV_HELPER(int16_t, int16, 16, i16, m1, 0);
+RVV_HELPER(int16_t, int16, 16, i16, m2, 1);
+RVV_HELPER(int16_t, int16, 16, i16, m4, 2);
+RVV_HELPER(int16_t, int16, 16, i16, m8, 3);
+
+RVV_HELPER(uint32_t, uint32, 32, u32, mf2, -1);
 RVV_HELPER(uint32_t, uint32, 32, u32, m1, 0);
 RVV_HELPER(uint32_t, uint32, 32, u32, m2, 1);
 RVV_HELPER(uint32_t, uint32, 32, u32, m4, 2);
 RVV_HELPER(uint32_t, uint32, 32, u32, m8, 3);
+
+RVV_HELPER(int32_t, int32, 32, i32, mf2, -1);
+RVV_HELPER(int32_t, int32, 32, i32, m1, 0);
+RVV_HELPER(int32_t, int32, 32, i32, m2, 1);
+RVV_HELPER(int32_t, int32, 32, i32, m4, 2);
+RVV_HELPER(int32_t, int32, 32, i32, m8, 3);
 
 RVV_HELPER(uint64_t, uint64, 64, u64, m1, 0);
 RVV_HELPER(uint64_t, uint64, 64, u64, m2, 1);
 RVV_HELPER(uint64_t, uint64, 64, u64, m4, 2);
 RVV_HELPER(uint64_t, uint64, 64, u64, m8, 3);
 
+RVV_HELPER(int64_t, int64, 64, i64, m1, 0);
+RVV_HELPER(int64_t, int64, 64, i64, m2, 1);
+RVV_HELPER(int64_t, int64, 64, i64, m4, 2);
+RVV_HELPER(int64_t, int64, 64, i64, m8, 3);
+
+RVV_HELPER(float, float32, 32, f32, m1, 0);
+
+RVV_HELPER(double, float64, 64, f64, m1, 0);
+
 #undef RVV_HELPER
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <typename Vtype, typename = void> struct rvv_scalar
+{
+    using type = decltype(__riscv_vmv_x(std::declval<Vtype>()));
+};
+
+template <typename Vtype>
+struct rvv_scalar<Vtype,
+                  std::void_t<decltype(__riscv_vfmv_f(std::declval<Vtype>()))>>
+{
+    using type = decltype(__riscv_vfmv_f(std::declval<Vtype>()));
+};
+
+template <typename Vtype> using rvv_scalar_t = typename rvv_scalar<Vtype>::type;
 
 template <typename T> struct rvv_traits;
 
 #define RVV_TRAITS(T, NAME, SIZE, EMUL, LOGM)                                  \
     template <> struct rvv_traits<v##NAME##EMUL##_t>                           \
     {                                                                          \
-        using scalar = T;                                                      \
         using type = v##NAME##EMUL##_t;                                        \
-        static constexpr size_t logm = LOGM;                                   \
+        using scalar = rvv_scalar_t<type>;                                     \
+        static constexpr int logm = LOGM;                                      \
         static void se(scalar *base, type value, size_t vl)                    \
         {                                                                      \
             return __riscv_vse##SIZE(base, value, vl);                         \
         }                                                                      \
     }
-
-// decltype(__riscv_vmv_x(declval<type>))
 
 RVV_TRAITS(uint8_t, uint8, 8, mf8, -3);
 RVV_TRAITS(uint8_t, uint8, 8, mf4, -2);
@@ -85,16 +137,25 @@ RVV_TRAITS(uint8_t, uint8, 8, m2, 1);
 RVV_TRAITS(uint8_t, uint8, 8, m4, 2);
 RVV_TRAITS(uint8_t, uint8, 8, m8, 3);
 
+RVV_TRAITS(uint16_t, uint16, 16, mf4, -2);
+RVV_TRAITS(uint16_t, uint16, 16, mf2, -1);
 RVV_TRAITS(uint16_t, uint16, 16, m1, 0);
 RVV_TRAITS(uint16_t, uint16, 16, m2, 1);
 RVV_TRAITS(uint16_t, uint16, 16, m4, 2);
 RVV_TRAITS(uint16_t, uint16, 16, m8, 3);
 
+RVV_TRAITS(uint32_t, uint32, 32, mf2, -1);
 RVV_TRAITS(uint32_t, uint32, 32, m1, 0);
 RVV_TRAITS(uint32_t, uint32, 32, m2, 1);
 RVV_TRAITS(uint32_t, uint32, 32, m4, 2);
 RVV_TRAITS(uint32_t, uint32, 32, m8, 3);
 
+RVV_TRAITS(uint64_t, uint64, 64, m1, 0);
+RVV_TRAITS(uint64_t, uint64, 64, m2, 1);
+RVV_TRAITS(uint64_t, uint64, 64, m4, 2);
+RVV_TRAITS(uint64_t, uint64, 64, m8, 3);
+
+RVV_TRAITS(float, float32, 32, mf2, -1);
 RVV_TRAITS(float, float32, 32, m1, 0);
 RVV_TRAITS(float, float32, 32, m2, 1);
 RVV_TRAITS(float, float32, 32, m4, 2);
@@ -105,38 +166,104 @@ RVV_TRAITS(double, float64, 64, m2, 1);
 RVV_TRAITS(double, float64, 64, m4, 2);
 RVV_TRAITS(double, float64, 64, m8, 3);
 
+RVV_TRAITS(int8_t, int8, 8, mf8, -3);
+RVV_TRAITS(int8_t, int8, 8, mf4, -2);
+RVV_TRAITS(int8_t, int8, 8, mf2, -1);
 RVV_TRAITS(int8_t, int8, 8, m1, 0);
 RVV_TRAITS(int8_t, int8, 8, m2, 1);
 RVV_TRAITS(int8_t, int8, 8, m4, 2);
 RVV_TRAITS(int8_t, int8, 8, m8, 3);
 
+RVV_TRAITS(int16_t, int16, 16, mf4, -2);
+RVV_TRAITS(int16_t, int16, 16, mf2, -1);
 RVV_TRAITS(int16_t, int16, 16, m1, 0);
 RVV_TRAITS(int16_t, int16, 16, m2, 1);
 RVV_TRAITS(int16_t, int16, 16, m4, 2);
 RVV_TRAITS(int16_t, int16, 16, m8, 3);
 
+RVV_TRAITS(int32_t, int32, 32, mf2, -1);
+RVV_TRAITS(int32_t, int32, 32, m1, 0);
+RVV_TRAITS(int32_t, int32, 32, m2, 1);
+RVV_TRAITS(int32_t, int32, 32, m4, 2);
+RVV_TRAITS(int32_t, int32, 32, m8, 3);
+
+RVV_TRAITS(int64_t, int64, 64, m1, 0);
+RVV_TRAITS(int64_t, int64, 64, m2, 1);
+RVV_TRAITS(int64_t, int64, 64, m4, 2);
+RVV_TRAITS(int64_t, int64, 64, m8, 3);
+
 #undef RVV_TRAITS
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename DstS, typename SrcT>
-inline auto rvv_uint_cvt(SrcT src, size_t vl)
-{
-    static_assert(std::is_integral_v<DstS>);
+template <size_t Vf> struct vext_impl;
 
+#define VEXT_IMPL(VF)                                                          \
+    template <> struct vext_impl<VF>                                           \
+    {                                                                          \
+        template <typename InT> static auto apply(InT in, size_t vl)           \
+        {                                                                      \
+            using scalar_in = typename rvv_traits<InT>::scalar;                \
+            if constexpr (std::is_signed_v<scalar_in>)                         \
+                return __riscv_vsext_vf##VF(in, vl);                           \
+            else                                                               \
+                return __riscv_vzext_vf##VF(in, vl);                           \
+        }                                                                      \
+    }
+
+VEXT_IMPL(2);
+VEXT_IMPL(4);
+VEXT_IMPL(8);
+
+template <size_t DstScalarSize, typename InT>
+inline auto vext(InT in, size_t vl)
+{
+    using scalar_in = rvv_scalar_t<InT>;
+    return vext_impl<DstScalarSize / sizeof(scalar_in)>::apply(in, vl);
+}
+
+#undef VEXT_IMPL
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Convert between different sizes
+template <size_t DstScalarSize, typename SrcT>
+inline auto rvv_integral_size_cvt(SrcT src, size_t vl)
+{
     using src_scalar = typename rvv_traits<SrcT>::scalar;
     static constexpr size_t src_size = sizeof(src_scalar);
-    static constexpr size_t dst_size = sizeof(DstS);
+    static constexpr size_t dst_size = DstScalarSize;
 
     if constexpr (dst_size > src_size)
-        return rvv_uint_cvt<DstS>(__riscv_vwcvtu_x(src, vl), vl);
-    // TODO: use vzext?
+        return vext<dst_size>(src, vl);
 
     else if constexpr (dst_size < src_size)
-        return rvv_uint_cvt<DstS>(__riscv_vncvt_x(src, vl), vl);
+        return rvv_integral_size_cvt<dst_size>(__riscv_vncvt_x(src, vl), vl);
 
     else
         return src;
+}
+
+// Convert between different sizes and signed/unsigned
+template <typename DstS, typename SrcT>
+inline auto rvv_integral_cvt(SrcT src, size_t vl)
+{
+
+    using src_scalar = typename rvv_traits<SrcT>::scalar;
+    using dst_scalar = DstS;
+
+    auto tmp = rvv_integral_size_cvt<sizeof(dst_scalar)>(src, vl);
+
+    using cur_type = decltype(tmp);
+    using helper_dst_type = rvv_helper<dst_scalar, rvv_traits<cur_type>::logm>;
+
+    static_assert(sizeof(rvv_scalar_t<cur_type>) == sizeof(DstS));
+
+    if constexpr (std::is_unsigned_v<src_scalar> !=
+                  std::is_unsigned_v<dst_scalar>)
+        return helper_dst_type::reinterpret(tmp);
+    else
+        return tmp;
 }
 
 template <typename DstS, typename SrcT>
@@ -159,27 +286,52 @@ inline auto rvv_fp_cvt(SrcT src, size_t vl)
 }
 
 template <typename DstS, typename SrcT>
-inline auto rvv_uint_to_fp(SrcT src, size_t vl)
+inline auto rvv_integral_to_fp(SrcT src, size_t vl)
 {
     using src_scalar = typename rvv_traits<SrcT>::scalar;
     static constexpr size_t dst_size = sizeof(DstS);
     static constexpr size_t src_size = sizeof(src_scalar);
 
     if constexpr (dst_size > src_size)
-        return __riscv_vfwcvt_f(
-            rvv_uint_cvt<size_to_uint<dst_size / 2>>(src, vl), vl);
+        return __riscv_vfwcvt_f(rvv_integral_size_cvt<dst_size / 2>(src, vl),
+                                vl);
 
     else if constexpr (dst_size < src_size)
-        return __riscv_vfncvt_f(
-            rvv_uint_cvt<size_to_uint<dst_size * 2>>(src, vl), vl);
+        return __riscv_vfncvt_f(rvv_integral_size_cvt<dst_size * 2>(src, vl),
+                                vl);
 
     else
         return __riscv_vfcvt_f(src, vl);
 }
 
 template <typename DstS, typename SrcT>
-inline auto rvv_fp_to_uint(SrcT src, size_t vl)
+inline auto rvv_fp_to_integral(SrcT src, size_t vl)
 {
+    using src_scalar = typename rvv_traits<SrcT>::scalar;
+    using dst_scalar = DstS;
+    static constexpr size_t dst_scalar_size = sizeof(dst_scalar);
+    if constexpr (std::is_unsigned_v<dst_scalar>)
+    {
+        if constexpr (sizeof(dst_scalar) > sizeof(src_scalar))
+            return rvv_integral_size_cvt<dst_scalar_size>(
+                __riscv_vfwcvt_xu(src, vl), vl);
+        else if constexpr (sizeof(dst_scalar) < sizeof(src_scalar))
+            return rvv_integral_size_cvt<dst_scalar_size>(
+                __riscv_vfncvt_xu(src, vl), vl);
+        else
+            return __riscv_vfcvt_xu(src, vl);
+    }
+    else
+    {
+        if constexpr (sizeof(dst_scalar) > sizeof(src_scalar))
+            return rvv_integral_size_cvt<dst_scalar_size>(
+                __riscv_vfwcvt_x(src, vl), vl);
+        else if constexpr (sizeof(dst_scalar) < sizeof(src_scalar))
+            return rvv_integral_size_cvt<dst_scalar_size>(
+                __riscv_vfncvt_x(src, vl), vl);
+        else
+            return __riscv_vfcvt_x(src, vl);
+    }
 }
 
 template <typename DstS, typename SrcT> inline auto rvv_cvt(SrcT src, size_t vl)
@@ -189,12 +341,22 @@ template <typename DstS, typename SrcT> inline auto rvv_cvt(SrcT src, size_t vl)
     if constexpr (std::is_integral_v<src_scalar> &&
                   std::is_integral_v<dst_scalar>)
     {
-        return rvv_uint_cvt<DstS>(src, vl);
+        return rvv_integral_cvt<DstS>(src, vl);
     }
     else if constexpr (std::is_integral_v<src_scalar> &&
                        std::is_floating_point_v<dst_scalar>)
     {
-        return rvv_uint_to_fp<DstS>(src, vl);
+        return rvv_integral_to_fp<DstS>(src, vl);
+    }
+    else if constexpr (std::is_floating_point_v<src_scalar> &&
+                       std::is_integral_v<dst_scalar>)
+    {
+        return rvv_fp_to_integral<DstS>(src, vl);
+    }
+    else if constexpr (std::is_floating_point_v<src_scalar> &&
+                       std::is_floating_point_v<dst_scalar>)
+    {
+        return rvv_fp_cvt<DstS>(src, vl);
     }
     else
         return src;  // TODO: more cases
@@ -215,14 +377,24 @@ struct copy_words_lmul_hint<FOO, BAR> : std::integral_constant<int, BLAH>
 };
 */
 
+// using std::cmp_less;
+template <class T, class U> constexpr bool cmp_less(T t, U u) noexcept
+{
+    if constexpr (std::is_integral_v<T> && std::is_integral_v<U>)
+        if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
+            return t < u;
+        else if constexpr (std::is_signed_v<T>)
+            return t < 0 || std::make_unsigned_t<T>(t) < u;
+        else
+            return u >= 0 && t < std::make_unsigned_t<U>(u);
+    else
+        return static_cast<double>(t) < static_cast<double>(u);
+}
+
 template <typename TIn, typename TOut, typename Enable = void>
 struct copy_words_fn;
 
-template <typename In, typename Out>
-struct copy_words_fn<
-    In, Out
-    //, std::enable_if_t<std::is_integral_v<UintIn> && std::is_integral_v<UintOut>>
-    >
+template <typename In, typename Out> struct copy_words_fn<In, Out>
 {
     static auto apply(const In *__restrict in, Out *__restrict out, ptrdiff_t n)
     {
@@ -230,48 +402,54 @@ struct copy_words_fn<
         using scalar_in = In;
         using scalar_out = Out;
 
+        static constexpr auto in_max = std::numeric_limits<scalar_in>::max();
+        static constexpr auto in_min = std::numeric_limits<scalar_in>::lowest();
+        static constexpr auto out_max = std::numeric_limits<scalar_out>::max();
+        static constexpr auto out_min =
+            std::numeric_limits<scalar_out>::lowest();
+
         for (; n > 0;)
         {
             const size_t vl = rvv::setvl(n);
             auto src = rvv::le(in, vl);
 
-            if constexpr (std::is_integral_v<scalar_in> &&
-                          std::is_integral_v<scalar_out> &&
-                          std::numeric_limits<scalar_in>::max() >
-                              std::numeric_limits<scalar_out>::max())
+            // GDALClampValue
+            if constexpr (cmp_less(out_max, in_max))
             {
-                src = __riscv_vminu(src, std::numeric_limits<scalar_out>::max(),
-                                    vl);
+                if constexpr (std::is_integral_v<scalar_in>)
+                {
+                    if constexpr (std::is_unsigned_v<scalar_in>)
+                        src = __riscv_vminu(src, out_max, vl);
+                    else
+                        src = __riscv_vmin(src, out_max, vl);
+                }
+                else
+                {
+                    static_assert(std::is_floating_point_v<scalar_in>);
+                    src = __riscv_vfmin(src, out_max, vl);
+                }
             }
-            // FIXME: add more cases
+
+            if constexpr (cmp_less(in_min, out_min))
+            {
+                if constexpr (std::is_integral_v<scalar_in>)
+                {
+                    if constexpr (std::is_unsigned_v<scalar_in>)
+                        // src = __riscv_vmaxu(src, max(out_min, 0), vl);
+                        ;
+                    else
+                        src = __riscv_vmax(src, out_min, vl);
+                }
+                else
+                {
+                    static_assert(std::is_floating_point_v<scalar_in>);
+                    src = __riscv_vfmax(src, out_min, vl);
+                }
+            }
 
             auto res = rvv_cvt<scalar_out>(src, vl);
 
-            static_assert(
-                std::is_same_v<typename rvv_traits<decltype(res)>::scalar,
-                               scalar_out>);
-
             rvv_traits<decltype(res)>::se(out, res, vl);
-
-            in += vl;
-            out += vl;
-            n -= vl;
-        }
-    }
-};
-
-template <> struct copy_words_fn<uint16_t, int16_t>
-{
-    static auto apply(const uint16_t *__restrict in, int16_t *__restrict out,
-                      ptrdiff_t n)
-    {
-        for (; n > 0;)
-        {
-            const size_t vl = __riscv_vsetvl_e16m1(n);
-            auto src = __riscv_vle16_v_u16m1(in, vl);
-            auto dst =
-                __riscv_vreinterpret_i16m1(__riscv_vminu(src, 32767U, vl));
-            __riscv_vse16(out, dst, vl);
 
             in += vl;
             out += vl;
