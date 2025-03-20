@@ -299,6 +299,8 @@ inline auto rvv_integral_size_cvt(SrcT src, size_t vl)
     static constexpr size_t src_size = sizeof(src_scalar);
     static constexpr size_t dst_size = DstScalarSize;
 
+    // TODO: use vnclip(src, 0, 0, vl)?
+
     if constexpr (dst_size > src_size)
         return vext<dst_size>(src, vl);
 
@@ -379,29 +381,29 @@ inline auto rvv_fp_to_integral(SrcT src, size_t vl)
     {
         if constexpr (sizeof(dst_scalar) > sizeof(src_scalar))
             return rvv_integral_size_cvt<dst_scalar_size>(
-                __riscv_vfwcvt_xu(src, vl), vl);
+                __riscv_vfwcvt_xu(src, __RISCV_FRM_RMM, vl), vl);
         else if constexpr (sizeof(dst_scalar) < sizeof(src_scalar))
         {
-            auto v = __riscv_vfncvt_xu(src, vl);
+            auto v = __riscv_vfncvt_xu(src, __RISCV_FRM_RMM, vl);
             v = rvv_clamp_value<dst_scalar>(v, vl);
             return rvv_integral_size_cvt<dst_scalar_size>(v, vl);
         }
         else
-            return __riscv_vfcvt_xu(src, vl);
+            return __riscv_vfcvt_xu(src, __RISCV_FRM_RMM, vl);
     }
     else
     {
         if constexpr (sizeof(dst_scalar) > sizeof(src_scalar))
             return rvv_integral_size_cvt<dst_scalar_size>(
-                __riscv_vfwcvt_x(src, vl), vl);
+                __riscv_vfwcvt_x(src, __RISCV_FRM_RMM, vl), vl);
         else if constexpr (sizeof(dst_scalar) < sizeof(src_scalar))
         {
-            auto v = __riscv_vfncvt_x(src, vl);
+            auto v = __riscv_vfncvt_x(src, __RISCV_FRM_RMM, vl);
             v = rvv_clamp_value<dst_scalar>(v, vl);
             return rvv_integral_size_cvt<dst_scalar_size>(v, vl);
         }
         else
-            return __riscv_vfcvt_x(src, vl);
+            return __riscv_vfcvt_x(src, __RISCV_FRM_RMM, vl);
     }
 }
 
