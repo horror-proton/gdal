@@ -2655,12 +2655,12 @@ FORCE_INLINE __m128i _mm_sad_epu8(__m128i a, __m128i b) {
   vuint8m1_t max = __riscv_vmaxu_vv_u8m1(_a, _b, 16);
   vuint8m1_t min = __riscv_vminu_vv_u8m1(_a, _b, 16);
   vuint8m1_t diff = __riscv_vsub_vv_u8m1(max, min, 16);
-  vuint8m1_t zeros = __riscv_vmv_v_x_u8m1(0, 16);
+  vuint16m1_t zeros = __riscv_vmv_v_x_u16m1(0, 8);
   vuint8m1_t high = __riscv_vslidedown_vx_u8m1(diff, 8, 16);
-  vuint16m1_t redsum_low = __riscv_vwredsumu_vs_u8m1_u16m1(
-      diff, __riscv_vreinterpret_v_u8m1_u16m1(zeros), 8);
-  vuint16m1_t redsum_high = __riscv_vwredsumu_vs_u8m1_u16m1(
-      high, __riscv_vreinterpret_v_u8m1_u16m1(zeros), 16);
+  vuint16m1_t redsum_low =
+      __riscv_vwredsumu_vs_u8m1_u16m1_tu(zeros, diff, zeros, 8);
+  vuint16m1_t redsum_high =
+      __riscv_vwredsumu_vs_u8m1_u16m1_tu(zeros, high, zeros, 8);
   return vreinterpretq_u16_m128i(
       __riscv_vslideup_vx_u16m1_tu(redsum_low, redsum_high, 4, 8));
 }
