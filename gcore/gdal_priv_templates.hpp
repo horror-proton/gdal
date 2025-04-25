@@ -882,7 +882,11 @@ static inline void GDALCopyXMMToInt32(const __m128i xmm, void *pDest)
 
 static inline void GDALCopyXMMToInt64(const __m128i xmm, void *pDest)
 {
+#ifdef SSE2RVV_H
+    __riscv_vse32_v_i32m1(reinterpret_cast<int32_t *>(pDest), xmm, 4);
+#else
     _mm_storel_epi64(reinterpret_cast<__m128i *>(pDest), xmm);
+#endif
 }
 
 #if __SSSE3__

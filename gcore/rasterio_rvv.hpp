@@ -11,6 +11,26 @@ namespace rasterio_rvv
 namespace detail
 {
 
+template <size_t V> struct static_log2;
+
+template <> struct static_log2<1> : std::integral_constant<int, 0>
+{
+};
+
+template <> struct static_log2<2> : std::integral_constant<int, 1>
+{
+};
+
+template <> struct static_log2<4> : std::integral_constant<int, 2>
+{
+};
+
+template <> struct static_log2<8> : std::integral_constant<int, 3>
+{
+};
+
+template <size_t V> static constexpr int static_log2_v = static_log2<V>::value;
+
 template <size_t S>
 using size_to_uint = std::conditional_t<
     (S == 1), uint8_t,
@@ -34,6 +54,10 @@ template <typename T, int LOGM> struct rvv_helper;
         static type le(const T *ptr, size_t vl)                                \
         {                                                                      \
             return __riscv_vle##SIZE##_v_##EEW##EMUL(ptr, vl);                 \
+        }                                                                      \
+        static type lse(const T *base, ptrdiff_t bstride, size_t vl)           \
+        {                                                                      \
+            return __riscv_vlse##SIZE##_v_##EEW##EMUL(base, bstride, vl);      \
         }                                                                      \
         template <typename Vsrc> static type reinterpret(Vsrc src)             \
         {                                                                      \
@@ -93,6 +117,7 @@ RVV_HELPER(int64_t, int64, 64, i64, m2, 1);
 RVV_HELPER(int64_t, int64, 64, i64, m4, 2);
 RVV_HELPER(int64_t, int64, 64, i64, m8, 3);
 
+RVV_HELPER(float, float32, 32, f32, mf2, -1);
 RVV_HELPER(float, float32, 32, f32, m1, 0);
 RVV_HELPER(float, float32, 32, f32, m2, 1);
 RVV_HELPER(float, float32, 32, f32, m4, 2);
@@ -121,6 +146,47 @@ struct rvv_scalar<Vtype,
 
 template <typename Vtype> using rvv_scalar_t = typename rvv_scalar<Vtype>::type;
 
+template <typename VBool> struct rvv_bool_r;
+
+#define RVV_BOOL_R(T, LOGV)                                                    \
+    template <> struct rvv_bool_r<T>                                           \
+    {                                                                          \
+        static constexpr int log_value = LOGV;                                 \
+        static constexpr size_t value = 1U << static_cast<size_t>(log_value);  \
+    }
+
+RVV_BOOL_R(vbool1_t, 0);
+RVV_BOOL_R(vbool2_t, 1);
+RVV_BOOL_R(vbool4_t, 2);
+RVV_BOOL_R(vbool8_t, 3);
+RVV_BOOL_R(vbool16_t, 4);
+RVV_BOOL_R(vbool32_t, 5);
+RVV_BOOL_R(vbool64_t, 6);
+
+#undef RVV_BOOL_R
+
+template <typename Vtype, typename T2>
+constexpr auto rvv_eq(Vtype op1, T2 op2, size_t vl)
+{
+    using scalar = rvv_scalar_t<Vtype>;
+    if constexpr (std::is_floating_point_v<scalar>)
+        return __riscv_vmfeq(op1, op2, vl);
+    else
+        return __riscv_vmseq(op1, op2, vl);
+}
+
+template <typename Vtype>
+static constexpr int rvv_logemul_v =
+    static_log2_v<sizeof(rvv_scalar_t<Vtype>)> + 3 -
+    rvv_bool_r<decltype(rvv_eq(std::declval<Vtype>(), 0, 0))>::log_value;
+
+static_assert(rvv_logemul_v<vuint8m1_t> == 0);
+static_assert(rvv_logemul_v<vuint8mf2_t> == -1);
+static_assert(rvv_logemul_v<vfloat32m1_t> == 0);
+static_assert(rvv_logemul_v<vfloat32m8_t> == 3);
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <typename T> struct rvv_traits;
 
 #define RVV_TRAITS(T, NAME, SIZE, EMUL, LOGM)                                  \
@@ -128,10 +194,15 @@ template <typename T> struct rvv_traits;
     {                                                                          \
         using type = v##NAME##EMUL##_t;                                        \
         using scalar = rvv_scalar_t<type>;                                     \
-        static constexpr int logm = LOGM;                                      \
+        static constexpr int logm = rvv_logemul_v<type>;                       \
         static void se(scalar *base, type value, size_t vl)                    \
         {                                                                      \
             return __riscv_vse##SIZE(base, value, vl);                         \
+        }                                                                      \
+        static void sse(scalar *base, ptrdiff_t bstride, type value,           \
+                        size_t vl)                                             \
+        {                                                                      \
+            return __riscv_vsse##SIZE(base, bstride, value, vl);               \
         }                                                                      \
     }
 
