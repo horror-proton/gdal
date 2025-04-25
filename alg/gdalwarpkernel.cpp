@@ -53,6 +53,11 @@
 #include "ogr_geos.h"
 #endif
 
+#ifdef __riscv_vector
+#include <riscv_vector.h>
+#include "gdalrvv.hpp"
+#endif
+
 #ifdef USE_NEON_OPTIMIZATIONS
 #include "include_sse2neon.h"
 #define USE_SSE2
@@ -3528,6 +3533,39 @@ static double GWKCubic(double dfX)
 
 static double GWKCubic4Values(double *padfValues)
 {
+#if defined(__riscv_vector) && __riscv_v_fixed_vlen >= 256
+
+    static constexpr size_t vl = 4;
+
+    const auto vs = __riscv_vle64_v_f64m1(padfValues, vl);
+
+    const auto dfAbsX = __riscv_vfabs(vs, vl);
+    const auto dfX2 = __riscv_vfmul(vs, vs, vl);
+
+    const auto le1 = __riscv_vmfle(dfAbsX, 1.0, vl);
+    const auto nle2 = __riscv_vmfgt(dfAbsX, 2.0, vl);
+
+    const auto case1 = __riscv_vfadd(
+        __riscv_vfmul(
+            dfX2, __riscv_vfadd(__riscv_vfmul(dfAbsX, 1.5, vl), -2.5, vl), vl),
+        1.0, vl);
+
+    const auto case2 = __riscv_vfadd(
+        __riscv_vfadd(
+            __riscv_vfmul(
+                dfX2, __riscv_vfadd(__riscv_vfmul(dfAbsX, -0.5, vl), +2.5, vl),
+                vl),
+            __riscv_vfmul(dfAbsX, -4, vl), vl),
+        +2.0, vl);
+
+    auto dfVal = __riscv_vfmerge(case2, 0., nle2, vl);
+    dfVal = __riscv_vmerge(dfVal, case1, le1, vl);
+
+    __riscv_vse64(padfValues, dfVal, vl);
+
+    return __riscv_vfmv_f(
+        __riscv_vfredosum(dfVal, __riscv_vfmv_v_f_f64m1(0, vl), vl));
+#else
     const double dfAbsX_0 = fabs(padfValues[0]);
     const double dfAbsX_1 = fabs(padfValues[1]);
     const double dfAbsX_2 = fabs(padfValues[2]);
@@ -3566,6 +3604,7 @@ static double GWKCubic4Values(double *padfValues)
     padfValues[2] = dfVal2;
     padfValues[3] = dfVal3;
     return dfVal0 + dfVal1 + dfVal2 + dfVal3;
+#endif
 }
 
 /************************************************************************/
@@ -4520,12 +4559,19 @@ static void GWKComputeWeights(GDALResampleAlg eResample, int iMin, int iMax,
     double dfAccumulatorWeightHorizontal = cpl::NumericLimits<double>::min();
     for (; i + 2 < iMax; i += 4, iC += 4)
     {
+#ifdef __riscv_vector
+        auto res = __riscv_vfcvt_f(__riscv_vid_v_u64m1(4), 4);
+        res = __riscv_vfadd(res, i - dfDeltaX, 4);
+        res = __riscv_vfmul(res, dfXScale, 4);
+        __riscv_vse64(padfWeightsHorizontal + iC, res, 4);
+#else
         padfWeightsHorizontal[iC] = (i - dfDeltaX) * dfXScale;
         padfWeightsHorizontal[iC + 1] = padfWeightsHorizontal[iC] + dfXScale;
         padfWeightsHorizontal[iC + 2] =
             padfWeightsHorizontal[iC + 1] + dfXScale;
         padfWeightsHorizontal[iC + 3] =
             padfWeightsHorizontal[iC + 2] + dfXScale;
+#endif
         dfAccumulatorWeightHorizontal +=
             pfnGetWeight4Values(padfWeightsHorizontal + iC);
     }
@@ -4543,10 +4589,17 @@ static void GWKComputeWeights(GDALResampleAlg eResample, int iMin, int iMax,
     double dfAccumulatorWeightVertical = cpl::NumericLimits<double>::min();
     for (; j + 2 < jMax; j += 4, jC += 4)
     {
+#ifdef __riscv_vector
+        auto res = __riscv_vfcvt_f(__riscv_vid_v_u64m1(4), 4);
+        res = __riscv_vfadd(res, j - dfDeltaY, 4);
+        res = __riscv_vfmul(res, dfYScale, 4);
+        __riscv_vse64(padfWeightsVertical + jC, res, 4);
+#else
         padfWeightsVertical[jC] = (j - dfDeltaY) * dfYScale;
         padfWeightsVertical[jC + 1] = padfWeightsVertical[jC] + dfYScale;
         padfWeightsVertical[jC + 2] = padfWeightsVertical[jC + 1] + dfYScale;
         padfWeightsVertical[jC + 3] = padfWeightsVertical[jC + 2] + dfYScale;
+#endif
         dfAccumulatorWeightVertical +=
             pfnGetWeight4Values(padfWeightsVertical + jC);
     }
@@ -4686,8 +4739,13 @@ static bool GWKResampleNoMasks_SSE2_T(const GDALWarpKernel *poWK, int iBand,
     const int nSrcXSize = poWK->nSrcXSize;
     const int nSrcYSize = poWK->nSrcYSize;
 
+#ifdef __riscv
+    const int iSrcX = static_cast<int>(lround(dfSrcX)) - 1;
+    const int iSrcY = static_cast<int>(lround(dfSrcY)) - 1;
+#else
     const int iSrcX = static_cast<int>(floor(dfSrcX - 0.5));
     const int iSrcY = static_cast<int>(floor(dfSrcY - 0.5));
+#endif
     const GPtrDiff_t iSrcOffset =
         iSrcX + static_cast<GPtrDiff_t>(iSrcY) * nSrcXSize;
     const int nXRadius = poWK->nXRadius;
@@ -4729,6 +4787,82 @@ static bool GWKResampleNoMasks_SSE2_T(const GDALWarpKernel *poWK, int iBand,
     }
 
     GPtrDiff_t iSampJ = iSrcOffset + static_cast<GPtrDiff_t>(jMin) * nSrcXSize;
+#ifdef __riscv_vector
+
+    static constexpr ptrdiff_t blk_height = 2;
+    double dfAccumulator = 0.0;
+    const size_t vlmax = __riscv_vsetvlmax_e64m1();
+    auto v_acc_final = __riscv_vfmv_v_f_f64m1(0, vlmax);
+
+    int j = jMin;
+    int jC = 0;
+    for (; j + blk_height <= jMax;
+         j += blk_height, jC += blk_height, iSampJ += blk_height * nSrcXSize)
+    {
+        int iC = 0;
+        int i = iMin;
+
+        using fixed_vfloat =
+            __attribute__((riscv_rvv_vector_bits(256))) vfloat64m1_t;
+
+        fixed_vfloat v_acc[blk_height];
+
+#pragma GCC unroll blk_height
+        for (int jj = 0; jj < blk_height; ++jj)
+            v_acc[jj] = __riscv_vfmv_v_f_f64m1(0, vlmax);
+
+        for (; i <= iMax;)
+        {
+            size_t vl = __riscv_vsetvl_e64m1(iMax - i + 1);
+
+            auto v_padfWeight =
+                __riscv_vle64_v_f64m1(padfWeightsHorizontal + iC, vl);
+
+#pragma GCC unroll blk_height
+            for (int jj = 0; jj < blk_height; ++jj)
+                v_acc[jj] = __riscv_vfmacc_tu(
+                    v_acc[jj],
+                    gdalrvv::load_as_double<0>(
+                        pSrcBand + i + iSampJ + (jj * nSrcXSize), vl),
+                    v_padfWeight, vl);
+
+            i += vl;
+            iC += vl;
+        }
+
+#pragma GCC unroll blk_height
+        for (int jj = 0; jj < blk_height; ++jj)
+        {
+            v_acc_final = __riscv_vfmacc(
+                v_acc_final, padfWeightsVertical[jC + jj], v_acc[jj], vlmax);
+        }
+    }
+
+    for (; j <= jMax; ++j, iSampJ += nSrcXSize, ++jC)
+    {
+        auto v_acc_1 = __riscv_vfmv_v_f_f64m1(0, vlmax);
+        for (int i = iMin, iC = 0; i <= iMax;)
+        {
+            const size_t vl = __riscv_vsetvl_e64m1(iMax - i + 1);
+            const auto v_pixels =
+                gdalrvv::load_as_double<0>(pSrcBand + i + iSampJ, vl);
+
+            const auto v_padfWeight =
+                __riscv_vle64_v_f64m1(padfWeightsHorizontal + iC, vl);
+
+            v_acc_1 = __riscv_vfmacc_tu(v_acc_1, v_pixels, v_padfWeight, vl);
+
+            i += vl;
+            iC += vl;
+        }
+        v_acc_final = __riscv_vfmacc(v_acc_final, padfWeightsVertical[jC],
+                                     v_acc_1, vlmax);
+    }
+
+    const auto zero = __riscv_vfmv_v_f_f64m1(0, 1);
+    dfAccumulator = __riscv_vfmv_f(__riscv_vfredusum(v_acc_final, zero, vlmax));
+
+#else
     // Process by chunk of 4 rows.
     int jC = 0;
     int j = jMin;
