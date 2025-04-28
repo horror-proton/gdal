@@ -461,6 +461,10 @@ inline __m128i sse2_hadd_epi16(__m128i a, __m128i b)
 #define NOINLINE
 #endif
 
+#endif
+
+#if defined(USE_SSE2) || defined(__riscv_vector)
+
 template <class T>
 static int NOINLINE
 QuadraticMeanByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
@@ -720,9 +724,13 @@ AverageByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
 #endif
 }
 
+#endif
+
 /************************************************************************/
 /*                     QuadraticMeanUInt16SSE2()                        */
 /************************************************************************/
+
+#ifdef USE_SSE2
 
 #ifdef __SSE3__
 #define sse2_hadd_pd _mm_hadd_pd
@@ -761,6 +769,9 @@ inline __m256 FIXUP_LANES(__m256 x)
 
 #endif
 
+#endif
+
+#if defined(USE_SSE2) || defined(__riscv_vector)
 template <class T>
 static int
 QuadraticMeanUInt16SSE2(int nDstXWidth, int nChunkXSize,
@@ -1161,10 +1172,13 @@ static int AverageUInt16SSE2(int nDstXWidth, int nChunkXSize,
     return iDstPixel;
 #endif
 }
+#endif
 
 /************************************************************************/
 /*                      QuadraticMeanFloatSSE2()                        */
 /************************************************************************/
+
+#ifdef USE_SSE2
 
 #ifdef __AVX2__
 #define RMS_FLOAT_ELTS 8
@@ -1232,6 +1246,9 @@ inline __m128 FIXUP_LANES(__m128 x)
 }
 
 #endif
+
+#endif
+#if defined(USE_SSE2) || defined(__riscv_vector)
 
 template <class T>
 static int NOINLINE
@@ -1678,7 +1695,7 @@ GDALResampleChunk_AverageOrRMS_T(const GDALOverviewResampleArgs &args,
                         static_cast<GPtrDiff_t>(nSrcYOff - nChunkYOff) *
                             nChunkXSize;
                     int iDstPixel = 0;
-#ifdef USE_SSE2
+#if defined(USE_SSE2) || defined(__riscv_vector)
                     if (bQuadraticMean && eWrkDataType == GDT_Byte)
                     {
                         iDstPixel = QuadraticMeanByteSSE2OrAVX2(
@@ -1745,7 +1762,7 @@ GDALResampleChunk_AverageOrRMS_T(const GDALOverviewResampleArgs &args,
                         static_cast<GPtrDiff_t>(nSrcYOff - nChunkYOff) *
                             nChunkXSize;
                     int iDstPixel = 0;
-#ifdef USE_SSE2
+#if defined(USE_SSE2) || defined(__riscv_vector)
                     if (eWrkDataType == GDT_Float32)
                     {
                         if (bQuadraticMean)
@@ -3277,6 +3294,10 @@ inline void GDALResampleConvolutionHorizontalWithMask<GUInt16>(
         dfWeightSum);
 }
 
+#endif  // USE_SSE2
+
+#if defined(USE_SSE2) || defined(__riscv_vector)
+
 /************************************************************************/
 /*              GDALResampleConvolutionHorizontal_3rows_SSE2<T>         */
 /************************************************************************/
@@ -3287,6 +3308,43 @@ static inline void GDALResampleConvolutionHorizontal_3rows_SSE2(
     const double *padfWeightsAligned, int nSrcPixelCount, double &dfRes1,
     double &dfRes2, double &dfRes3)
 {
+#ifdef __riscv_vector
+    const size_t vlmax = __riscv_vsetvlmax_e64m2();
+
+    auto v_acc1 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    auto v_acc2 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    auto v_acc3 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+
+    for (; nSrcPixelCount > 0;)
+    {
+        const size_t vl = __riscv_vsetvl_e64m2(nSrcPixelCount);
+        auto v_row1 = gdalrvv::load_as_double<1>(pChunkRow1, vl);
+        auto v_row2 = gdalrvv::load_as_double<1>(pChunkRow2, vl);
+        auto v_row3 = gdalrvv::load_as_double<1>(pChunkRow3, vl);
+
+        auto weights = __riscv_vle64_v_f64m2(padfWeightsAligned, vl);
+
+        v_acc1 = __riscv_vfmacc_tu(v_acc1, v_row1, weights, vl);
+        v_acc2 = __riscv_vfmacc_tu(v_acc2, v_row2, weights, vl);
+        v_acc3 = __riscv_vfmacc_tu(v_acc3, v_row3, weights, vl);
+
+        pChunkRow1 += vl;
+        pChunkRow2 += vl;
+        pChunkRow3 += vl;
+        padfWeightsAligned += vl;
+        nSrcPixelCount -= vl;
+    }
+
+    auto zero = __riscv_vfmv_v_f_f64m1(0., 1);
+
+    auto v_res1 = __riscv_vfredosum(v_acc1, zero, vlmax);
+    auto v_res2 = __riscv_vfredosum(v_acc2, zero, vlmax);
+    auto v_res3 = __riscv_vfredosum(v_acc3, zero, vlmax);
+
+    dfRes1 = __riscv_vfmv_f(v_res1);
+    dfRes2 = __riscv_vfmv_f(v_res2);
+    dfRes3 = __riscv_vfmv_f(v_res3);
+#else
     XMMReg4Double v_acc1 = XMMReg4Double::Zero(),
                   v_acc2 = XMMReg4Double::Zero(),
                   v_acc3 = XMMReg4Double::Zero();
@@ -3324,6 +3382,7 @@ static inline void GDALResampleConvolutionHorizontal_3rows_SSE2(
         dfRes2 += pChunkRow2[i] * padfWeightsAligned[i];
         dfRes3 += pChunkRow3[i] * padfWeightsAligned[i];
     }
+#endif
 }
 
 /************************************************************************/
@@ -3351,6 +3410,10 @@ inline void GDALResampleConvolutionHorizontal_3rows<GUInt16>(
         pChunkRow1, pChunkRow2, pChunkRow3, padfWeightsAligned, nSrcPixelCount,
         dfRes1, dfRes2, dfRes3);
 }
+
+#endif
+
+#ifdef USE_SSE2
 
 /************************************************************************/
 /*     GDALResampleConvolutionHorizontalPixelCountLess8_3rows_SSE2<T>   */
@@ -3928,10 +3991,38 @@ static CPLErr GDALResampleChunk_ConvolutionT(
             // j used after for.
             size_t j =
                 (nSrcLineStart - nChunkYOff) * static_cast<size_t>(nDstXSize);
-#ifdef USE_SSE2
+#if defined(USE_SSE2) || defined(__riscv_vector)
             if constexpr (eWrkDataType == GDT_Float32)
             {
-#ifdef __AVX__
+#ifdef __riscv_vector
+                for (; iFilteredPixelOff < nDstXSize;)
+                {
+                    const size_t vl =
+                        __riscv_vsetvl_e64m1(nDstXSize - iFilteredPixelOff);
+
+                    auto sum = __riscv_vfmv_v_f_f64m1(0., vl);
+                    for (int line_i = 0; line_i < nSrcLineCount; ++line_i)
+                    {
+                        auto line_v = __riscv_vle64_v_f64m1(
+                            padfHorizontalFiltered + j + nDstXSize * line_i,
+                            vl);
+                        sum = __riscv_vfmacc(sum, padfWeights[line_i], line_v,
+                                             vl);
+                    }
+                    auto dst = __riscv_vfncvt_f(sum, vl);
+                    __riscv_vse32(pafDstScanline + iFilteredPixelOff, dst, vl);
+
+                    for (size_t k = 0; k < vl; k++)
+                    {
+                        pafDstScanline[iFilteredPixelOff + k] =
+                            replaceValIfNodata(
+                                pafDstScanline[iFilteredPixelOff + k]);
+                    }
+
+                    iFilteredPixelOff += vl;
+                    j += vl;
+                }
+#elif defined(__AVX__)
                 for (; iFilteredPixelOff + 15 < nDstXSize;
                      iFilteredPixelOff += 16, j += 16)
                 {

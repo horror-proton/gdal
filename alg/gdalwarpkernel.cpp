@@ -4849,6 +4849,7 @@ static bool GWKResampleNoMasks_SSE2_T(const GDALWarpKernel *poWK, int iBand,
 
         dfAccumulator += padfWeightsVertical[jC] * dfAccumulatorLocal;
     }
+#endif
 
     *pValue = GWKClampValueT<T>(dfAccumulator * dfInvWeights);
 
