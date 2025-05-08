@@ -3120,10 +3120,14 @@ static inline void GDALUnrolledCopy(T *CPL_RESTRICT pDest,
                                     const T *CPL_RESTRICT pSrc,
                                     GPtrDiff_t nIters)
 {
+#ifdef RASTERIO_RVV_HPP_INCLUDED
+    rasterio_rvv::unrolled_copy<T, srcStride, dstStride>(pDest, pSrc, nIters);
+#else
     GDALUnrolledCopyGeneric<T, srcStride, dstStride>(pDest, pSrc, nIters);
+#endif
 }
 
-#ifdef HAVE_SSE2
+#if defined(HAVE_SSE2) && !defined(RASTERIO_RVV_HPP_INCLUDED)
 
 template <>
 void GDALUnrolledCopy<GByte, 2, 1>(GByte *CPL_RESTRICT pDest,
@@ -5397,7 +5401,12 @@ GDALDeinterleave3Byte(const GByte *CPL_RESTRICT pabySrc,
                       GByte *CPL_RESTRICT pabyDest0,
                       GByte *CPL_RESTRICT pabyDest1,
                       GByte *CPL_RESTRICT pabyDest2, size_t nIters)
-#ifdef USE_NEON_OPTIMIZATIONS
+#ifdef __riscv_vector
+{
+    return rasterio_rvv::deinterleave_3byte(pabySrc, pabyDest0, pabyDest1,
+                                            pabyDest2, nIters);
+}
+#elif defined(USE_NEON_OPTIMIZATIONS)
 {
     return GDALDeinterleave3Byte_SSSE3(pabySrc, pabyDest0, pabyDest1, pabyDest2,
                                        nIters);
@@ -5506,7 +5515,12 @@ static void GDALDeinterleave4Byte(const GByte *CPL_RESTRICT pabySrc,
                                   GByte *CPL_RESTRICT pabyDest1,
                                   GByte *CPL_RESTRICT pabyDest2,
                                   GByte *CPL_RESTRICT pabyDest3, size_t nIters)
-#ifdef USE_NEON_OPTIMIZATIONS
+#ifdef __riscv_vector
+{
+    return rasterio_rvv::deinterleave_4byte(pabySrc, pabyDest0, pabyDest1,
+                                            pabyDest2, pabyDest3, nIters);
+}
+#elif defined(USE_NEON_OPTIMIZATIONS)
 {
     return GDALDeinterleave4Byte_SSSE3(pabySrc, pabyDest0, pabyDest1, pabyDest2,
                                        pabyDest3, nIters);

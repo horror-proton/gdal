@@ -278,6 +278,56 @@ inline void copy_words(const TIn *__restrict in, TOut *__restrict out,
     return detail::copy_words_fn<TIn, TOut>::apply(in, out, n);
 }
 
+inline void deinterleave_3byte(const uint8_t *__restrict pabySrc,
+                               uint8_t *__restrict pabyDest0,
+                               uint8_t *__restrict pabyDest1,
+                               uint8_t *__restrict pabyDest2, size_t nIters)
+{
+    for (; nIters > 0;)
+    {
+        const size_t vl = __riscv_vsetvl_e8m2(nIters);
+        const auto vx3 = __riscv_vlseg3e8_v_u8m2x3(pabySrc, vl);
+
+        __riscv_vse8(pabyDest0, __riscv_vget_u8m2(vx3, 0), vl);
+        __riscv_vse8(pabyDest1, __riscv_vget_u8m2(vx3, 1), vl);
+        __riscv_vse8(pabyDest2, __riscv_vget_u8m2(vx3, 2), vl);
+
+        nIters -= vl;
+
+        pabySrc += 3 * vl;
+        pabyDest0 += vl;
+        pabyDest1 += vl;
+        pabyDest2 += vl;
+    }
+}
+
+inline void deinterleave_4byte(const uint8_t *__restrict pabySrc,
+                               uint8_t *__restrict pabyDest0,
+                               uint8_t *__restrict pabyDest1,
+                               uint8_t *__restrict pabyDest2,
+                               uint8_t *__restrict pabyDest3, size_t nIters)
+{
+#pragma GCC unroll 2
+    for (; nIters > 0;)
+    {
+        const size_t vl = __riscv_vsetvl_e8m1(nIters);
+        const auto vx4 = __riscv_vlseg4e8_v_u8m1x4(pabySrc, vl);
+
+        __riscv_vse8(pabyDest0, __riscv_vget_u8m1(vx4, 0), vl);
+        __riscv_vse8(pabyDest1, __riscv_vget_u8m1(vx4, 1), vl);
+        __riscv_vse8(pabyDest2, __riscv_vget_u8m1(vx4, 2), vl);
+        __riscv_vse8(pabyDest3, __riscv_vget_u8m1(vx4, 3), vl);
+
+        nIters -= vl;
+
+        pabySrc += 4 * vl;
+        pabyDest0 += vl;
+        pabyDest1 += vl;
+        pabyDest2 += vl;
+        pabyDest3 += vl;
+    }
+}
+
 template <ptrdiff_t Stride>
 inline void unroll_copy_s_1(uint8_t *__restrict out,
                             const uint8_t *__restrict in, ptrdiff_t n)
@@ -290,6 +340,33 @@ inline void unroll_copy_s_1(uint8_t *__restrict out,
 
         in += vl * Stride;
         out += vl;
+        n -= vl;
+    }
+}
+
+template <typename T, size_t SrcStride, size_t DstStride>
+inline void unrolled_copy(T *__restrict dst, const T *__restrict src,
+                          ptrdiff_t n)
+{
+    using rvv = detail::rvv_helper<T, 3>;  // only optimized for T=u8, DstS=3
+    using rvv_t = typename rvv::type;
+    for (; n > 0;)
+    {
+        const size_t vl = rvv::setvl(n);
+
+        rvv_t v;
+        if constexpr (SrcStride == 1)
+            v = rvv::le(src, vl);
+        else
+            v = rvv::lse(src, SrcStride * sizeof(T), vl);
+
+        if constexpr (DstStride == 1)
+            detail::rvv_traits<rvv_t>::se(dst, v, vl);
+        else
+            detail::rvv_traits<rvv_t>::sse(dst, DstStride * sizeof(T), v, vl);
+
+        src += vl * SrcStride;
+        dst += vl * DstStride;
         n -= vl;
     }
 }
