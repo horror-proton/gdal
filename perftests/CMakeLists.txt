@@ -16,6 +16,9 @@ endif ()
 gdal_test_target(testperfcopywords testperfcopywords.cpp)
 gdal_test_target(testperfdeinterleave testperfdeinterleave.cpp)
 
+gdal_test_target(testperfgridinvdist testperfgridinvdist.cpp)
+gdal_test_target(testperfrpc testperfrpc.cpp)
+
 add_executable(bench_ogr_batch bench_ogr_batch.cpp)
 gdal_standard_includes(bench_ogr_batch)
 target_link_libraries(bench_ogr_batch PRIVATE $<TARGET_NAME:${GDAL_LIB_TARGET_NAME}>)
