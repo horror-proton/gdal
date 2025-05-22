@@ -296,6 +296,55 @@ static void RPCEvaluate4(const double *padfTerms, const double *padfCoefs,
                          double &dfSum4)
 
 {
+#if defined(__riscv_vector) && __riscv_v_fixed_vlen == 256
+    const size_t vl = 4;  // faster than f64m4 vl=20, why?
+
+    auto sum1 = __riscv_vfmv_v_f_f64m1(0, vl);
+    auto sum2 = __riscv_vfmv_v_f_f64m1(0, vl);
+    auto sum3 = __riscv_vfmv_v_f_f64m1(0, vl);
+    auto sum4 = __riscv_vfmv_v_f_f64m1(0, vl);
+#pragma GCC unroll 5
+    for (size_t j = 0; j < 5; ++j)
+    {
+        const size_t i = j * vl;
+        const auto terms = __riscv_vle64_v_f64m1(padfTerms + i, vl);
+        const auto coefs1 = __riscv_vle64_v_f64m1(padfCoefs + i + 0, vl);
+        const auto coefs2 = __riscv_vle64_v_f64m1(padfCoefs + i + 20, vl);
+        const auto coefs3 = __riscv_vle64_v_f64m1(padfCoefs + i + 40, vl);
+        const auto coefs4 = __riscv_vle64_v_f64m1(padfCoefs + i + 60, vl);
+
+        sum1 = __riscv_vfmacc(sum1, terms, coefs1, vl);
+        sum2 = __riscv_vfmacc(sum2, terms, coefs2, vl);
+        sum3 = __riscv_vfmacc(sum3, terms, coefs3, vl);
+        sum4 = __riscv_vfmacc(sum4, terms, coefs4, vl);
+    }
+    const auto zero = __riscv_vfmv_v_f_f64m1(0, vl);
+    dfSum1 = __riscv_vfmv_f(__riscv_vfredusum(sum1, zero, vl));
+    dfSum2 = __riscv_vfmv_f(__riscv_vfredusum(sum2, zero, vl));
+    dfSum3 = __riscv_vfmv_f(__riscv_vfredusum(sum3, zero, vl));
+    dfSum4 = __riscv_vfmv_f(__riscv_vfredusum(sum4, zero, vl));
+
+    /*
+    const size_t vl = 20;
+    const auto zero = __riscv_vfmv_v_f_f64m1(0, 1);
+
+    const auto terms = __riscv_vle64_v_f64m8(padfTerms, vl);
+
+    const auto coefs1 = __riscv_vle64_v_f64m8(padfCoefs + 0, vl);
+    const auto sum1 = __riscv_vfmul(terms, coefs1, vl);
+    dfSum1 = __riscv_vfmv_f(__riscv_vfredusum(sum1, zero, vl));
+    const auto coefs2 = __riscv_vle64_v_f64m8(padfCoefs + 20, vl);
+    const auto sum2 = __riscv_vfmul(terms, coefs2, vl);
+    dfSum2 = __riscv_vfmv_f(__riscv_vfredusum(sum2, zero, vl));
+    const auto coefs3 = __riscv_vle64_v_f64m8(padfCoefs + 40, vl);
+    const auto sum3 = __riscv_vfmul(terms, coefs3, vl);
+    dfSum3 = __riscv_vfmv_f(__riscv_vfredusum(sum3, zero, vl));
+    const auto coefs4 = __riscv_vle64_v_f64m8(padfCoefs + 60, vl);
+    const auto sum4 = __riscv_vfmul(terms, coefs4, vl);
+    dfSum4 = __riscv_vfmv_f(__riscv_vfredusum(sum4, zero, vl));
+    */
+
+#else
     XMMReg2Double sum1 = XMMReg2Double::Zero();
     XMMReg2Double sum2 = XMMReg2Double::Zero();
     XMMReg2Double sum3 = XMMReg2Double::Zero();
@@ -330,6 +379,7 @@ static void RPCEvaluate4(const double *padfTerms, const double *padfCoefs,
     dfSum2 = sum2.GetHorizSum();
     dfSum3 = sum3.GetHorizSum();
     dfSum4 = sum4.GetHorizSum();
+#endif
 }
 
 #else
