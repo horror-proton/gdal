@@ -42,6 +42,67 @@ CPLErr GDALGridInverseDistanceToAPower2NoSmoothingNoSearchSSE(
     const float fEpsilon = 0.0000000000001f;
     const float fXPoint = static_cast<float>(dfXPoint);
     const float fYPoint = static_cast<float>(dfYPoint);
+
+#ifdef __riscv_vector
+
+    const size_t vlmax = __riscv_vsetvlmax_e32m8();
+
+    auto v_nominator = __riscv_vfmv_v_f_f32m8(0, vlmax);
+    auto v_denominator = __riscv_vfmv_v_f_f32m8(0, vlmax);
+
+    for (; i < nPoints;)
+    {
+        const size_t vl = __riscv_vsetvl_e32m8(nPoints - i);
+
+        const auto v_px = __riscv_vle32_v_f32m8(pafX + i, vl);
+        const auto v_rx = __riscv_vfsub(v_px, fXPoint, vl);
+
+        auto v_r2 = __riscv_vfmul(v_rx, v_rx, vl);
+
+        const auto v_py = __riscv_vle32_v_f32m8(pafY + i, vl);
+        const auto v_ry = __riscv_vfsub(v_py, fYPoint, vl);
+
+        v_r2 = __riscv_vfmacc(v_r2, v_ry, v_ry, vl);
+
+        const auto v_mask = __riscv_vmflt(v_r2, fEpsilon, vl);
+        const long first = __riscv_vfirst(v_mask, vl);
+        if (first != -1) [[unlikely]]
+        {
+            *pdfValue = pafZ[i + first];
+            return CE_None;
+        }
+
+        const auto v_invr2 = __riscv_vfrec7(v_r2, vl);
+
+        const auto v_pz = __riscv_vle32_v_f32m8(pafZ + i, vl);
+        v_nominator = __riscv_vfmacc_tu(v_nominator, v_invr2, v_pz, vl);
+        v_denominator =
+            __riscv_vfadd_tu(v_denominator, v_denominator, v_invr2, vl);
+
+        i += vl;
+    }
+
+    const auto zero = __riscv_vfmv_v_f_f32m1(0, 1);
+
+    const float f_nominator =
+        __riscv_vfmv_f(__riscv_vfredosum(v_nominator, zero, vlmax));
+    const float f_denominator =
+        __riscv_vfmv_f(__riscv_vfredosum(v_denominator, zero, vlmax));
+
+    if (f_denominator == 0)
+    {
+        *pdfValue = static_cast<const GDALGridInverseDistanceToAPowerOptions *>(
+                        poOptions)
+                        ->dfNoDataValue;
+    }
+    else
+    {
+        *pdfValue = f_nominator / f_denominator;
+    }
+
+    return CE_None;
+#else
+
     const __m128 xmm_small = _mm_load1_ps(const_cast<float *>(&fEpsilon));
     const __m128 xmm_x = _mm_load1_ps(const_cast<float *>(&fXPoint));
     const __m128 xmm_y = _mm_load1_ps(const_cast<float *>(&fYPoint));
@@ -171,6 +232,7 @@ CPLErr GDALGridInverseDistanceToAPower2NoSmoothingNoSearchSSE(
     }
 
     return CE_None;
+#endif
 }
 
 #endif /* HAVE_SSE_AT_COMPILE_TIME */
