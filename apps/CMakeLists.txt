@@ -67,6 +67,10 @@ if (GDAL_ENABLE_DRIVER_GTIFF)
   target_compile_definitions(appslib PRIVATE -DHAVE_TIFF)
 endif()
 
+if (GDAL_ENABLE_ARM_NEON_OPTIMIZATIONS)
+  target_compile_definitions(appslib PRIVATE -DHAVE_SSSE3_AT_COMPILE_TIME -DUSE_NEON_OPTIMIZATIONS)
+endif ()
+
 if (GDAL_USE_JSONC_INTERNAL)
   gdal_add_vendored_lib(appslib libjson)
 else ()

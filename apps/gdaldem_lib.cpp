@@ -113,6 +113,12 @@
 #include "emmintrin.h"
 #endif
 
+#ifdef USE_NEON_OPTIMIZATIONS
+#define HAVE_16_SSE_REG
+#define HAVE_SSE2
+#include "include_sse2neon.h"
+#endif
+
 static const double kdfDegreesToRadians = M_PI / 180.0;
 static const double kdfRadiansToDegrees = 180.0 / M_PI;
 
@@ -794,7 +800,7 @@ so we get a final formula with just one transcendental function
            sqrt(1 + psData->square_z * xx_plus_yy);
 */
 
-#ifdef HAVE_SSE2
+#if defined(HAVE_SSE2) && !defined(SSE2RVV_H)  // rsqrt accuracy issue
 inline double ApproxADivByInvSqrtB(double a, double b)
 {
     __m128d regB = _mm_load_sd(&b);
@@ -963,7 +969,99 @@ static float GDALHillshadeAlg_same_res(const T *afWin,
     return static_cast<float>(cang);
 }
 
-#ifdef HAVE_16_SSE_REG
+#ifdef __riscv_vector
+template <class T>
+static int
+GDALHillshadeAlg_same_res_multisample(const T *pafThreeLineWin, int nLine1Off,
+                                      int nLine2Off, int nLine3Off, int nXSize,
+                                      void *pData, float *pafOutputBuf)
+{
+    static_assert(std::is_same_v<T, int>);
+    auto *psData = static_cast<GDALHillshadeAlgData *>(pData);
+
+    const auto fact_x = (psData->sin_az_mul_cos_alt_mul_z_mul_254_mul_inv_res);
+    const auto fact_y = (psData->cos_az_mul_cos_alt_mul_z_mul_254_mul_inv_res);
+    const auto const_num = (psData->sin_altRadians_mul_254);
+    const auto const_denum = (psData->square_z_mul_square_inv_res);
+
+    const size_t vlmax = __riscv_vsetvlmax_e32m4();
+    const size_t vl = vlmax - 2;
+    const size_t vl2 = vlmax;
+
+    int j = 1;
+    for (; j < nXSize - static_cast<int>(vl); j += static_cast<int>(vl))
+    {
+
+        const int *firstLine = pafThreeLineWin + nLine1Off + j - 1;
+        const int *secondLine = pafThreeLineWin + nLine2Off + j - 1;
+        const int *thirdLine = pafThreeLineWin + nLine3Off + j - 1;
+
+        const auto firstLine0 = __riscv_vle32_v_i32m4(firstLine, vl2);
+        const auto firstLine1 = __riscv_vslidedown(firstLine0, 1, vl);
+        const auto firstLine2 = __riscv_vslidedown(firstLine0, 2, vl);
+
+        const auto thirdLine0 = __riscv_vle32_v_i32m4(thirdLine, vl2);
+        const auto thirdLine1 = __riscv_vslidedown(thirdLine0, 1, vl);
+        const auto thirdLine2 = __riscv_vslidedown(thirdLine0, 2, vl);
+
+        const auto one_minus_seven = __riscv_vsub(firstLine1, thirdLine1, vl);
+        const auto six_minus_two = __riscv_vsub(thirdLine0, firstLine2, vl);
+
+        auto accX = __riscv_vsub(firstLine0, thirdLine2, vl);
+        auto accY = accX;
+
+        const auto secondLine0 = __riscv_vle32_v_i32m4(secondLine, vl2);
+        const auto secondLine2 = __riscv_vslidedown(secondLine0, 2, vl);
+
+        const auto three_minus_five =
+            __riscv_vsub(secondLine0, secondLine2, vl);
+
+        accX = __riscv_vadd(accX, three_minus_five, vl);
+        accX = __riscv_vadd(accX, three_minus_five, vl);
+        accX = __riscv_vadd(accX, six_minus_two, vl);
+
+        accY = __riscv_vadd(accY, one_minus_seven, vl);
+        accY = __riscv_vadd(accY, one_minus_seven, vl);
+        accY = __riscv_vsub(accY, six_minus_two, vl);
+
+        const auto x = __riscv_vfwcvt_f(accX, vl);
+        const auto y = __riscv_vfwcvt_f(accY, vl);
+
+        auto nominator = __riscv_vfmul(x, fact_x, vl);
+        nominator = __riscv_vfmacc(nominator, fact_y, y, vl);
+        nominator = __riscv_vfadd(nominator, const_num, vl);
+
+        auto xx_plus_yy = __riscv_vfmul(x, x, vl);
+        xx_plus_yy = __riscv_vfmacc(xx_plus_yy, y, y, vl);
+
+        const auto d =
+            __riscv_vfadd(__riscv_vfmul(xx_plus_yy, const_denum, vl), 1., vl);
+
+        // two steps of Newton-Raphson method required here to pass the accuracy tests
+        auto rsqrt_d = __riscv_vfrsqrt7(d, vl);
+        const auto half_d = __riscv_vfmul(d, 0.5, vl);
+        for (int i = 0; i < 2; ++i)
+        {
+            rsqrt_d = __riscv_vfmul(
+                rsqrt_d,
+                __riscv_vfrsub(
+                    __riscv_vfmul(half_d, __riscv_vfmul(rsqrt_d, rsqrt_d, vl),
+                                  vl),
+                    1.5, vl),
+                vl);
+        }
+
+        auto res = __riscv_vfncvt_f(__riscv_vfmul(nominator, rsqrt_d, vl), vl);
+        res = __riscv_vfadd(res, 1.F, vl);
+        res = __riscv_vfmax(res, 1.F, vl);
+
+        __riscv_vse32(pafOutputBuf + j, res, vl);
+    }
+
+    return j;
+}
+
+#elif defined(HAVE_16_SSE_REG)
 template <class T>
 static int
 GDALHillshadeAlg_same_res_multisample(const T *pafThreeLineWin, int nLine1Off,
