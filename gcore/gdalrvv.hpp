@@ -349,4 +349,24 @@ inline auto load_as_double(const int16_t *ptr, size_t vl)
     return result;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO: use vnclipu
+
+template <typename V>
+inline void store_from_double(uint8_t *base, V value, size_t vl)
+{
+    auto a = __riscv_vfncvt_xu(value, __RISCV_FRM_RMM, vl);
+    auto b = __riscv_vncvt_x(__riscv_vncvt_x(a, vl), vl);
+    rvv_traits<decltype(b)>::se(base, b, vl);
+}
+
+template <typename V>
+inline void store_from_double(uint16_t *base, V value, size_t vl)
+{
+    auto a = __riscv_vfncvt_xu(value, __RISCV_FRM_RMM, vl);
+    auto b = __riscv_vncvt_x(a, vl);
+    rvv_traits<decltype(b)>::se(base, b, vl);
+}
+
 }  // namespace gdalrvv

@@ -648,10 +648,84 @@ void GDALPansharpenOperation::WeightedBrovey3(
         }
     }
 }
+#ifdef __riscv_vector
+
+#include "gdalrvv.hpp"
+
+template <class T, int NINPUT, int NOUTPUT>
+size_t GDALPansharpenOperation::WeightedBroveyPositiveWeightsInternal(
+    const T *pPanBuffer, const T *pUpsampledSpectralBuffer, T *pDataBuf,
+    size_t nValues, size_t nBandValues, T nMaxValue) const
+{
+    static_assert(NINPUT == 3 || NINPUT == 4);
+    static_assert(NOUTPUT == 3 || NOUTPUT == 4);
+
+    const auto w0 = psOptions->padfWeights[0];
+    const auto w1 = psOptions->padfWeights[1];
+    const auto w2 = psOptions->padfWeights[2];
+    const auto w3 = (NINPUT < 4) ? 0. : psOptions->padfWeights[3];
+
+    size_t j = 0;
+
+    static constexpr int logl = 2;
+    const size_t vlmax = __riscv_vsetvlmax_e64m4();
+
+    const size_t vl = vlmax;
+    for (; j + vl - 1 < nValues; j += vl)
+    {
+        using gdalrvv::load_as_double;
+        using gdalrvv::store_from_double;
+
+        const auto val0 = load_as_double<logl>(
+            pUpsampledSpectralBuffer + 0 * nBandValues + j, vl);
+        const auto val1 = load_as_double<logl>(
+            pUpsampledSpectralBuffer + 1 * nBandValues + j, vl);
+        const auto val2 = load_as_double<logl>(
+            pUpsampledSpectralBuffer + 2 * nBandValues + j, vl);
+
+        [[maybe_unused]] std::remove_cv_t<decltype(val0)> val3;
+        if constexpr (NINPUT == 4 || NOUTPUT == 4)
+            val3 = load_as_double<logl>(
+                pUpsampledSpectralBuffer + 3 * nBandValues + j, vl);
+
+        auto pseudo_panchro = __riscv_vfmul(val0, w0, vl);
+        pseudo_panchro = __riscv_vfmacc(pseudo_panchro, w1, val1, vl);
+        pseudo_panchro = __riscv_vfmacc(pseudo_panchro, w2, val2, vl);
+
+        if constexpr (NINPUT == 4)
+            pseudo_panchro = __riscv_vfmacc(pseudo_panchro, w3, val3, vl);
+
+        const auto pan = load_as_double<logl>(pPanBuffer + j, vl);
+
+        const auto mask = __riscv_vmfeq(pseudo_panchro, 0., vl);
+        const auto factor = __riscv_vfmerge(
+            __riscv_vfdiv(pan, pseudo_panchro, vl), 0., mask, vl);
+
+        const auto res0 =
+            __riscv_vfmin(__riscv_vfmul(val0, factor, vl), nMaxValue, vl);
+        const auto res1 =
+            __riscv_vfmin(__riscv_vfmul(val1, factor, vl), nMaxValue, vl);
+        const auto res2 =
+            __riscv_vfmin(__riscv_vfmul(val2, factor, vl), nMaxValue, vl);
+
+        store_from_double(pDataBuf + 0 * nBandValues + j, res0, vl);
+        store_from_double(pDataBuf + 1 * nBandValues + j, res1, vl);
+        store_from_double(pDataBuf + 2 * nBandValues + j, res2, vl);
+
+        if constexpr (NOUTPUT == 4)
+        {
+            const auto res3 =
+                __riscv_vfmin(__riscv_vfmul(val3, factor, vl), nMaxValue, vl);
+            store_from_double(pDataBuf + 3 * nBandValues + j, res3, vl);
+        }
+    }
+
+    return j;
+}
 
 /* We restrict to 64bit processors because they are guaranteed to have SSE2 */
 /* Could possibly be used too on 32bit, but we would need to check at runtime */
-#if defined(__x86_64) || defined(_M_X64) || defined(USE_NEON_OPTIMIZATIONS)
+#elif defined(__x86_64) || defined(_M_X64) || defined(USE_NEON_OPTIMIZATIONS)
 
 #define USE_SSE2
 #include "gdalsse_priv.h"
