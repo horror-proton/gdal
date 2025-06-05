@@ -37,6 +37,10 @@
 #include "gdal_thread_pool.h"
 #include "gdal_utils.h"
 
+#ifdef __riscv_vector
+#include <riscv_vector.h>
+#endif
+
 #ifdef USE_NEON_OPTIMIZATIONS
 #define USE_SSE2_OPTIM
 #define USE_SSE41_OPTIM
@@ -3998,7 +4002,31 @@ CompositeSrcWithMaskIntoDest(const int nOutXSize, const int nOutYSize,
             GByte *pabyDestLine =
                 pabyDest + static_cast<GPtrDiff_t>(iY * nLineSpace);
             int iX = 0;
-#ifdef USE_SSE2_OPTIM
+#ifdef __riscv_vector
+            if (nPixelSpace == 1)
+            {
+                const size_t vlmax = __riscv_vsetvlmax_e8m2();
+                const size_t vl = vlmax;
+
+                for (; iX + static_cast<int>(vl) <= nOutXSize; iX += vl)
+                {
+                    const auto vmask =
+                        __riscv_vle8_v_u8m2(pabyMask + iMaskIdx, vl);
+                    const auto mask = __riscv_vmsne(vmask, 0, vl);
+                    const auto vsrc = __riscv_vle8_v_u8m2(pabySrc, vl);
+
+                    const auto vdst = __riscv_vle8_v_u8m2(pabyDestLine, vl);
+                    const auto res = __riscv_vmerge(vdst, vsrc, mask, vl);
+                    __riscv_vse8(pabyDestLine, res, vl);
+
+                    // __riscv_vse8(mask, pabyDestLine, vsrc, vl);
+
+                    pabyDestLine += vl;
+                    pabySrc += vl;
+                    iMaskIdx += vl;
+                }
+            }
+#elif defined(USE_SSE2_OPTIM)
             if (nPixelSpace == 1)
             {
                 // SSE2 version up to 6 times faster than portable version
