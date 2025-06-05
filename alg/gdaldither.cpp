@@ -235,7 +235,7 @@ int GDALDitherRGB2PCTInternal(
         iColor++;
     } while (iColor < nColors);
 
-#ifdef USE_SSE2
+#if defined(USE_SSE2) && !defined(__riscv_vector)  // not needed by vlseg4e8
     // Pad to multiple of 8 colors.
     const int nColorsMod8 = nColors % 8;
     if (nColorsMod8)
@@ -583,9 +583,52 @@ static int FindNearestColor(int nColors, int *panPCT, int nRedValue,
                             int nGreenValue, int nBlueValue)
 
 {
-#ifdef USE_SSE2
+#ifdef __riscv_vector
     int nBestDist = 768;
     int nBestIndex = 0;
+
+    for (int iColor = 0; iColor < nColors;)
+    {
+        const size_t vl = __riscv_vsetvl_e8m2(nColors - iColor);
+
+        const auto vpct =
+            __riscv_vlseg4e8_v_u8m2x4(CAST_PCT(panPCT + iColor), vl);
+        const auto vpct_r = __riscv_vget_v_u8m2x4_u8m2(vpct, 0);
+        const auto vpct_g = __riscv_vget_v_u8m2x4_u8m2(vpct, 1);
+        const auto vpct_b = __riscv_vget_v_u8m2x4_u8m2(vpct, 2);
+
+        const auto diff_r =
+            __riscv_vsub(__riscv_vmaxu(vpct_r, nRedValue, vl),
+                         __riscv_vminu(vpct_r, nRedValue, vl), vl);
+
+        const auto diff_g =
+            __riscv_vsub(__riscv_vmaxu(vpct_g, nGreenValue, vl),
+                         __riscv_vminu(vpct_g, nGreenValue, vl), vl);
+
+        const auto diff_b =
+            __riscv_vsub(__riscv_vmaxu(vpct_b, nBlueValue, vl),
+                         __riscv_vminu(vpct_b, nBlueValue, vl), vl);
+
+        const auto diff = __riscv_vadd(__riscv_vwaddu_vv(diff_r, diff_g, vl),
+                                       __riscv_vwcvtu_x(diff_b, vl), vl);
+
+        const auto init = __riscv_vmv_v_x_u16m1(nBestDist, 1);
+        const auto minv = __riscv_vmv_x(__riscv_vredminu(diff, init, vl));
+
+        if (minv < nBestDist) [[unlikely]]
+        {
+            const auto n = __riscv_vfirst(__riscv_vmseq(diff, minv, vl), vl);
+            nBestDist = minv;
+            nBestIndex = iColor + n;
+        }
+
+        iColor += vl;
+    }
+
+    return nBestIndex;
+#elif defined(USE_SSE2)
+    nBestDist = 768;
+    nBestIndex = 0;
 
     int anDistanceUnaligned[16 + 4] =
         {};  // 4 for alignment on 16-byte boundary.
@@ -669,9 +712,10 @@ static int FindNearestColor(int nColors, int *panPCT, int nRedValue,
 
     for (int iColor = 0; iColor < nColors; iColor++)
     {
-        const int nThisDist = std::abs(nRedValue - panPCT[4 * iColor + 0]) +
-                              std::abs(nGreenValue - panPCT[4 * iColor + 1]) +
-                              std::abs(nBlueValue - panPCT[4 * iColor + 2]);
+        const int nThisDist =
+            std::abs(nRedValue - CAST_PCT(panPCT)[4 * iColor + 0]) +
+            std::abs(nGreenValue - CAST_PCT(panPCT)[4 * iColor + 1]) +
+            std::abs(nBlueValue - CAST_PCT(panPCT)[4 * iColor + 2]);
 
         if (nThisDist < nBestDist)
         {
