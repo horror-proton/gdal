@@ -37,8 +37,19 @@
 
 #ifdef USE_NEON_OPTIMIZATIONS
 #define USE_SSE2
+#include "include_sse2neon.h"
 #elif defined(__x86_64) || defined(_M_X64)
 #define USE_SSE2
+#include "include_sse2neon.h"
+#endif
+
+#ifdef __riscv_vector
+#include <riscv_vector.h>
+#define USE_RVV
+// current implementation of RPCEvaluate4 assumes zvl256b
+#if __riscv_v_fixed_vlen == 256
+#define USE_RVV_OPTIM
+#endif
 #endif
 
 #ifdef USE_SSE2
@@ -269,7 +280,7 @@ typedef struct
     double adfDEMGeoTransform[6];
     double adfDEMReverseGeoTransform[6];
 
-#ifdef USE_SSE2_OPTIM
+#if defined(USE_SSE2_OPTIM) || defined(USE_RVV_OPTIM)
     double adfDoubles[20 * 4 + 1];
     // LINE_NUM_COEFF, LINE_DEN_COEFF, SAMP_NUM_COEFF and then SAMP_DEN_COEFF.
     double *padfCoeffs;
@@ -289,14 +300,16 @@ static bool GDALRPCOpenDEM(GDALRPCTransformInfo *psTransform);
 /************************************************************************/
 /*                            RPCEvaluate()                             */
 /************************************************************************/
-#ifdef USE_SSE2_OPTIM
+#ifdef USE_RVV_OPTIM
 
 static void RPCEvaluate4(const double *padfTerms, const double *padfCoefs,
                          double &dfSum1, double &dfSum2, double &dfSum3,
                          double &dfSum4)
 
 {
-#if defined(__riscv_vector) && __riscv_v_fixed_vlen == 256
+#if __riscv_v_fixed_vlen != 256
+#error
+#endif
     const size_t vl = 4;  // faster than f64m4 vl=20, why?
 
     auto sum1 = __riscv_vfmv_v_f_f64m1(0, vl);
@@ -343,8 +356,15 @@ static void RPCEvaluate4(const double *padfTerms, const double *padfCoefs,
     const auto sum4 = __riscv_vfmul(terms, coefs4, vl);
     dfSum4 = __riscv_vfmv_f(__riscv_vfredusum(sum4, zero, vl));
     */
+}
 
-#else
+#elif defined(USE_SSE2_OPTIM)
+
+static void RPCEvaluate4(const double *padfTerms, const double *padfCoefs,
+                         double &dfSum1, double &dfSum2, double &dfSum3,
+                         double &dfSum4)
+
+{
     XMMReg2Double sum1 = XMMReg2Double::Zero();
     XMMReg2Double sum2 = XMMReg2Double::Zero();
     XMMReg2Double sum3 = XMMReg2Double::Zero();
@@ -379,7 +399,6 @@ static void RPCEvaluate4(const double *padfTerms, const double *padfCoefs,
     dfSum2 = sum2.GetHorizSum();
     dfSum3 = sum3.GetHorizSum();
     dfSum4 = sum4.GetHorizSum();
-#endif
 }
 
 #else
@@ -488,7 +507,7 @@ static void RPCTransformPoint(const GDALRPCTransformInfo *psRPCTransformInfo,
     RPCComputeTerms(dfNormalizedLong, dfNormalizedLat, dfNormalizedHeight,
                     padfTerms);
 
-#ifdef USE_SSE2_OPTIM
+#if defined(USE_SSE2_OPTIM) || defined(USE_RVV_OPTIM)
     double dfSampNum = 0.0;
     double dfSampDen = 0.0;
     double dfLineNum = 0.0;
@@ -886,7 +905,7 @@ void *GDALCreateRPCTransformerV2(const GDALRPCInfoV2 *psRPCInfo, int bReversed,
     psTransform->sTI.pfnSerialize = GDALSerializeRPCTransformer;
     psTransform->sTI.pfnCreateSimilar = GDALCreateSimilarRPCTransformer;
 
-#ifdef USE_SSE2_OPTIM
+#if defined(USE_SSE2_OPTIM) || defined(USE_RVV_OPTIM)
     // Make sure padfCoeffs is aligned on a 16-byte boundary for SSE2 aligned
     // loads.
     psTransform->padfCoeffs =

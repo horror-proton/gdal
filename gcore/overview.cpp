@@ -38,7 +38,9 @@
 #include "gdalwarper.h"
 
 #ifdef __riscv_vector
+#define USE_RVV
 #include <riscv_vector.h>
+#include <gdalrvv.hpp>
 #endif
 
 #ifdef USE_NEON_OPTIMIZATIONS
@@ -463,15 +465,14 @@ inline __m128i sse2_hadd_epi16(__m128i a, __m128i b)
 
 #endif
 
-#if defined(USE_SSE2) || defined(__riscv_vector)
+#ifdef USE_RVV
 
 template <class T>
-static int NOINLINE
+static int
 QuadraticMeanByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
                             const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
                             T *CPL_RESTRICT pDstScanline)
 {
-#ifdef __riscv_vector
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint8_t *>(pSrcScanlineShiftedInOut);
     const auto mask_even = __riscv_vreinterpret_b4(
@@ -534,8 +535,16 @@ QuadraticMeanByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = reinterpret_cast<const T *>(pSrcScanlineShifted);
     return iDstPixel;
+}
 
-#else
+#elif defined(USE_SSE2)
+
+template <class T>
+static int NOINLINE
+QuadraticMeanByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
+                            const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
+                            T *CPL_RESTRICT pDstScanline)
+{
     // Optimized implementation for RMS on Byte by
     // processing by group of 8 output pixels, so as to use
     // a single _mm_sqrt_ps() call for 4 output pixels
@@ -613,22 +622,20 @@ QuadraticMeanByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = pSrcScanlineShifted;
     return iDstPixel;
-#endif
 }
+#endif
 
 /************************************************************************/
 /*                      AverageByteSSE2OrAVX2()                         */
 /************************************************************************/
 
+#ifdef USE_RVV
 template <class T>
 static int
 AverageByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
                       const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
                       T *CPL_RESTRICT pDstScanline)
 {
-
-#ifdef __riscv_vector
-
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint8_t *>(pSrcScanlineShiftedInOut);
 
@@ -679,8 +686,16 @@ AverageByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = reinterpret_cast<const T *>(pSrcScanlineShifted);
     return iDstPixel;
+}
 
-#else
+#elif defined(USE_SSE2)
+
+template <class T>
+static int
+AverageByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
+                      const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
+                      T *CPL_RESTRICT pDstScanline)
+{
 
     // Optimized implementation for average on Byte by
     // processing by group of 8 output pixels.
@@ -721,7 +736,6 @@ AverageByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = pSrcScanlineShifted;
     return iDstPixel;
-#endif
 }
 
 #endif
@@ -771,14 +785,13 @@ inline __m256 FIXUP_LANES(__m256 x)
 
 #endif
 
-#if defined(USE_SSE2) || defined(__riscv_vector)
+#ifdef USE_RVV
 template <class T>
 static int
 QuadraticMeanUInt16SSE2(int nDstXWidth, int nChunkXSize,
                         const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
                         T *CPL_RESTRICT pDstScanline)
 {
-#ifdef __riscv_vector
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint16_t *>(pSrcScanlineShiftedInOut);
 
@@ -842,8 +855,16 @@ QuadraticMeanUInt16SSE2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = reinterpret_cast<const T *>(pSrcScanlineShifted);
     return iDstPixel;
-#else
+}
 
+#elif defined(USE_SSE2)
+
+template <class T>
+static int
+QuadraticMeanUInt16SSE2(int nDstXWidth, int nChunkXSize,
+                        const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
+                        T *CPL_RESTRICT pDstScanline)
+{
     // Optimized implementation for RMS on UInt16 by
     // processing by group of 4 output pixels.
     const T *CPL_RESTRICT pSrcScanlineShifted = pSrcScanlineShiftedInOut;
@@ -1042,19 +1063,20 @@ QuadraticMeanUInt16SSE2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = pSrcScanlineShifted;
     return iDstPixel;
-#endif
 }
+#endif
 
 /************************************************************************/
 /*                         AverageUInt16SSE2()                          */
 /************************************************************************/
+
+#ifdef USE_RVV
 
 template <class T>
 static int AverageUInt16SSE2(int nDstXWidth, int nChunkXSize,
                              const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
                              T *CPL_RESTRICT pDstScanline)
 {
-#ifdef __riscv_vector
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint16_t *>(pSrcScanlineShiftedInOut);
 
@@ -1105,7 +1127,15 @@ static int AverageUInt16SSE2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = reinterpret_cast<const T *>(pSrcScanlineShifted);
     return iDstPixel;
+}
+
 #else
+
+template <class T>
+static int AverageUInt16SSE2(int nDstXWidth, int nChunkXSize,
+                             const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
+                             T *CPL_RESTRICT pDstScanline)
+{
     // Optimized implementation for average on UInt16 by
     // processing by group of 8 output pixels.
 
@@ -1170,7 +1200,6 @@ static int AverageUInt16SSE2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = pSrcScanlineShifted;
     return iDstPixel;
-#endif
 }
 #endif
 
@@ -1248,15 +1277,15 @@ inline __m128 FIXUP_LANES(__m128 x)
 #endif
 
 #endif
-#if defined(USE_SSE2) || defined(__riscv_vector)
+
+#ifdef USE_RVV
 
 template <class T>
-static int NOINLINE
+static int
 QuadraticMeanFloatSSE2(int nDstXWidth, int nChunkXSize,
                        const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
                        T *CPL_RESTRICT pDstScanline)
 {
-#ifdef __riscv_vector
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const float *>(pSrcScanlineShiftedInOut);
 
@@ -1328,9 +1357,16 @@ QuadraticMeanFloatSSE2(int nDstXWidth, int nChunkXSize,
     pSrcScanlineShiftedInOut =
         reinterpret_cast<const T *>(pSrcScanlineShiftedInOut);
     return iDstPixel;
+}
 
-#else
+#elif defined(USE_SSE2)
 
+template <class T>
+static int NOINLINE
+QuadraticMeanFloatSSE2(int nDstXWidth, int nChunkXSize,
+                       const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
+                       T *CPL_RESTRICT pDstScanline)
+{
     // Optimized implementation for RMS on Float32 by
     // processing by group of RMS_FLOAT_ELTS output pixels.
     const T *CPL_RESTRICT pSrcScanlineShifted = pSrcScanlineShiftedInOut;
@@ -1413,19 +1449,20 @@ QuadraticMeanFloatSSE2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = pSrcScanlineShifted;
     return iDstPixel;
-#endif
 }
+#endif
 
 /************************************************************************/
 /*                        AverageFloatSSE2()                            */
 /************************************************************************/
+
+#ifdef USE_RVV
 
 template <class T>
 static int AverageFloatSSE2(int nDstXWidth, int nChunkXSize,
                             const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
                             T *CPL_RESTRICT pDstScanline)
 {
-#ifdef __riscv_vector
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const float *>(pSrcScanlineShiftedInOut);
 
@@ -1467,8 +1504,15 @@ static int AverageFloatSSE2(int nDstXWidth, int nChunkXSize,
     pSrcScanlineShiftedInOut =
         reinterpret_cast<const T *>(pSrcScanlineShiftedInOut);
     return iDstPixel;
+}
 
-#else
+#elif defined(USE_SSE2)
+
+template <class T>
+static int AverageFloatSSE2(int nDstXWidth, int nChunkXSize,
+                            const T *&CPL_RESTRICT pSrcScanlineShiftedInOut,
+                            T *CPL_RESTRICT pDstScanline)
+{
     // Optimized implementation for average on Float32 by
     // processing by group of 4 output pixels.
     const T *CPL_RESTRICT pSrcScanlineShifted = pSrcScanlineShiftedInOut;
@@ -1509,9 +1553,7 @@ static int AverageFloatSSE2(int nDstXWidth, int nChunkXSize,
 
     pSrcScanlineShiftedInOut = pSrcScanlineShifted;
     return iDstPixel;
-#endif
 }
-
 #endif
 
 /************************************************************************/
@@ -1695,7 +1737,7 @@ GDALResampleChunk_AverageOrRMS_T(const GDALOverviewResampleArgs &args,
                         static_cast<GPtrDiff_t>(nSrcYOff - nChunkYOff) *
                             nChunkXSize;
                     int iDstPixel = 0;
-#if defined(USE_SSE2) || defined(__riscv_vector)
+#if defined(USE_SSE2) || defined(USE_RVV)
                     if (bQuadraticMean && eWrkDataType == GDT_Byte)
                     {
                         iDstPixel = QuadraticMeanByteSSE2OrAVX2(
@@ -1762,7 +1804,7 @@ GDALResampleChunk_AverageOrRMS_T(const GDALOverviewResampleArgs &args,
                         static_cast<GPtrDiff_t>(nSrcYOff - nChunkYOff) *
                             nChunkXSize;
                     int iDstPixel = 0;
-#if defined(USE_SSE2) || defined(__riscv_vector)
+#if defined(USE_SSE2) || defined(USE_RVV)
                     if (eWrkDataType == GDT_Float32)
                     {
                         if (bQuadraticMean)
@@ -3055,7 +3097,7 @@ static inline void GDALResampleConvolutionVertical_2cols(
     dfRes2 = dfVal3 + dfVal4;
 }
 
-#ifdef USE_SSE2
+#if defined(USE_SSE2) || defined(USE_RVV)
 
 #ifdef __AVX__
 /************************************************************************/
@@ -3296,7 +3338,7 @@ inline void GDALResampleConvolutionHorizontalWithMask<GUInt16>(
 
 #endif  // USE_SSE2
 
-#if defined(USE_SSE2) || defined(__riscv_vector)
+#if defined(USE_SSE2) || defined(USE_RVV)
 
 /************************************************************************/
 /*              GDALResampleConvolutionHorizontal_3rows_SSE2<T>         */
@@ -3308,7 +3350,7 @@ static inline void GDALResampleConvolutionHorizontal_3rows_SSE2(
     const double *padfWeightsAligned, int nSrcPixelCount, double &dfRes1,
     double &dfRes2, double &dfRes3)
 {
-#ifdef __riscv_vector
+#ifdef USE_RVV
     const size_t vlmax = __riscv_vsetvlmax_e64m2();
 
     auto v_acc1 = __riscv_vfmv_v_f_f64m2(0., vlmax);
@@ -3705,9 +3747,7 @@ static CPLErr GDALResampleChunk_ConvolutionT(
     /*      First pass: horizontal filter                                   */
     /* ==================================================================== */
     const int nChunkRightXOff = nChunkXOff + nChunkXSize;
-#ifdef USE_SSE2
-    bool bSrcPixelCountLess8 = dfXScaledRadius < 4;
-#endif
+    [[maybe_unused]] bool bSrcPixelCountLess8 = dfXScaledRadius < 4;
     for (int iDstPixel = nDstXOff; iDstPixel < nDstXOff2; ++iDstPixel)
     {
         const double dfSrcPixel =
@@ -3766,7 +3806,7 @@ static CPLErr GDALResampleChunk_ConvolutionT(
                     padfWeights[i] *= dfInvWeightSum;
             }
             int iSrcLineOff = 0;
-#ifdef USE_SSE2
+#if defined(USE_SSE2) || defined(USE_RVV)
             if (nSrcPixelCount == 4)
             {
                 for (; iSrcLineOff + 2 < nHeight; iSrcLineOff += 3)
@@ -3991,10 +4031,10 @@ static CPLErr GDALResampleChunk_ConvolutionT(
             // j used after for.
             size_t j =
                 (nSrcLineStart - nChunkYOff) * static_cast<size_t>(nDstXSize);
-#if defined(USE_SSE2) || defined(__riscv_vector)
+#if defined(USE_SSE2) || defined(USE_RVV)
             if constexpr (eWrkDataType == GDT_Float32)
             {
-#ifdef __riscv_vector
+#ifdef USE_RVV
                 for (; iFilteredPixelOff < nDstXSize;)
                 {
                     const size_t vl =

@@ -42,17 +42,17 @@
 #include "memdataset.h"
 #include "vrtdataset.h"
 
+#ifdef __riscv_vector
+#define HAVE_RVV
+#include "rasterio_rvv.hpp"
+#endif
+
 #if defined(__x86_64) || defined(_M_X64)
 #include <emmintrin.h>
 #define HAVE_SSE2
 #elif defined(USE_NEON_OPTIMIZATIONS)
 #include "include_sse2neon.h"
 #define HAVE_SSE2
-
-#ifdef __riscv_vector
-#include "rasterio_rvv.hpp"
-#endif
-
 #endif
 
 #ifdef HAVE_SSSE3_AT_COMPILE_TIME
@@ -2193,7 +2193,7 @@ static void inline GDALCopyWordsT(const Tin *const CPL_RESTRICT pSrcData,
                                   Tout *const CPL_RESTRICT pDstData,
                                   int nDstPixelStride, GPtrDiff_t nWordCount)
 {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
+#ifdef HAVE_RVV
     if (nSrcPixelStride == static_cast<int>(sizeof(*pSrcData)) &&
         nDstPixelStride == static_cast<int>(sizeof(*pDstData)))
     {
@@ -2250,7 +2250,7 @@ static void inline GDALCopyWordsT_8atatime(
     }
 }
 
-#ifndef RASTERIO_RVV_HPP_INCLUDED
+#ifndef HAVE_RVV
 #ifdef HAVE_SSE2
 
 template <class Tout>
@@ -2690,7 +2690,7 @@ void GDALCopyWordsT(const float *const CPL_RESTRICT pSrcData,
     GDALCopyWordsT_8atatime(pSrcData, nSrcPixelStride, pDstData,
                             nDstPixelStride, nWordCount);
 }
-#endif // RASTERIO_RVV_HPP_INCLUDED
+#endif
 
 /************************************************************************/
 /*                   GDALCopyWordsComplexT()                            */
@@ -3120,21 +3120,21 @@ static inline void GDALUnrolledCopy(T *CPL_RESTRICT pDest,
                                     const T *CPL_RESTRICT pSrc,
                                     GPtrDiff_t nIters)
 {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
+#ifdef HAVE_RVV
     rasterio_rvv::unrolled_copy<T, srcStride, dstStride>(pDest, pSrc, nIters);
 #else
     GDALUnrolledCopyGeneric<T, srcStride, dstStride>(pDest, pSrc, nIters);
 #endif
 }
 
-#if defined(HAVE_SSE2) && !defined(RASTERIO_RVV_HPP_INCLUDED)
+#if defined(HAVE_SSE2) || defined(HAVE_RVV)
 
 template <>
 void GDALUnrolledCopy<GByte, 2, 1>(GByte *CPL_RESTRICT pDest,
                                    const GByte *CPL_RESTRICT pSrc,
                                    GPtrDiff_t nIters)
 {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
+#ifdef HAVE_RVV
     rasterio_rvv::unroll_copy_s_1<2>(pDest, pSrc, nIters);
 #else
     decltype(nIters) i = 0;
@@ -3169,14 +3169,14 @@ void GDALUnrolledCopy<GByte, 2, 1>(GByte *CPL_RESTRICT pDest,
 #endif
 }
 
-#ifdef HAVE_SSSE3_AT_COMPILE_TIME
+#if defined(HAVE_SSSE3_AT_COMPILE_TIME) || defined(HAVE_RVV)
 
 template <>
 void GDALUnrolledCopy<GByte, 3, 1>(GByte *CPL_RESTRICT pDest,
                                    const GByte *CPL_RESTRICT pSrc,
                                    GPtrDiff_t nIters)
 {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
+#ifdef HAVE_RVV
     rasterio_rvv::unroll_copy_s_1<3>(pDest, pSrc, nIters);
 #else
     if (nIters > 16 && CPLHaveRuntimeSSSE3())
@@ -3197,7 +3197,7 @@ void GDALUnrolledCopy<GByte, 4, 1>(GByte *CPL_RESTRICT pDest,
                                    const GByte *CPL_RESTRICT pSrc,
                                    GPtrDiff_t nIters)
 {
-#ifdef RASTERIO_RVV_HPP_INCLUDED
+#ifdef HAVE_RVV
     rasterio_rvv::unroll_copy_s_1<4>(pDest, pSrc, nIters);
 #else
     decltype(nIters) i = 0;
@@ -5387,7 +5387,7 @@ bool GDALBufferHasOnlyNoData(const void *pBuffer, double dfNoDataValue,
     return false;
 }
 
-#ifdef HAVE_SSE2
+#if defined(HAVE_SSE2) || defined(HAVE_RVV)
 
 /************************************************************************/
 /*                    GDALDeinterleave3Byte()                           */
@@ -5401,7 +5401,7 @@ GDALDeinterleave3Byte(const GByte *CPL_RESTRICT pabySrc,
                       GByte *CPL_RESTRICT pabyDest0,
                       GByte *CPL_RESTRICT pabyDest1,
                       GByte *CPL_RESTRICT pabyDest2, size_t nIters)
-#ifdef __riscv_vector
+#ifdef HAVE_RVV
 {
     return rasterio_rvv::deinterleave_3byte(pabySrc, pabyDest0, pabyDest1,
                                             pabyDest2, nIters);
@@ -5515,7 +5515,7 @@ static void GDALDeinterleave4Byte(const GByte *CPL_RESTRICT pabySrc,
                                   GByte *CPL_RESTRICT pabyDest1,
                                   GByte *CPL_RESTRICT pabyDest2,
                                   GByte *CPL_RESTRICT pabyDest3, size_t nIters)
-#ifdef __riscv_vector
+#ifdef HAVE_RVV
 {
     return rasterio_rvv::deinterleave_4byte(pabySrc, pabyDest0, pabyDest1,
                                             pabyDest2, pabyDest3, nIters);

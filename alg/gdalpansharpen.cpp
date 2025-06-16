@@ -649,6 +649,7 @@ void GDALPansharpenOperation::WeightedBrovey3(
     }
 }
 #ifdef __riscv_vector
+#define USE_RVV
 
 #include "gdalrvv.hpp"
 

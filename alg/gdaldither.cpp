@@ -45,6 +45,11 @@
 #include "gdal.h"
 #include "gdal_priv.h"
 
+#ifdef __riscv_vector
+#include <riscv_vector.h>
+#define USE_RVV
+#endif
+
 #ifdef USE_NEON_OPTIMIZATIONS
 #define USE_SSE2
 #include "include_sse2neon.h"
@@ -53,7 +58,7 @@
 #include <emmintrin.h>
 #endif
 
-#ifdef USE_SSE2
+#if defined(USE_SSE2) || defined(USE_RVV)
 
 #define CAST_PCT(x) reinterpret_cast<GByte *>(x)
 #define ALIGN_INT_ARRAY_ON_16_BYTE(x)                                          \
@@ -196,7 +201,7 @@ int GDALDitherRGB2PCTInternal(
     /*      Setup more direct colormap.                                     */
     /* -------------------------------------------------------------------- */
     int iColor;
-#ifdef USE_SSE2
+#if defined(USE_SSE2) || defined(USE_RVV)
     int anPCTUnaligned[256 + 4];  // 4 for alignment on 16-byte boundary.
     int *anPCT = ALIGN_INT_ARRAY_ON_16_BYTE(anPCTUnaligned);
 #else
@@ -235,7 +240,7 @@ int GDALDitherRGB2PCTInternal(
         iColor++;
     } while (iColor < nColors);
 
-#if defined(USE_SSE2) && !defined(__riscv_vector)  // not needed by vlseg4e8
+#if defined(USE_SSE2) && !defined(USE_RVV)  // not needed by vlseg4e8
     // Pad to multiple of 8 colors.
     const int nColorsMod8 = nColors % 8;
     if (nColorsMod8)
@@ -583,7 +588,7 @@ static int FindNearestColor(int nColors, int *panPCT, int nRedValue,
                             int nGreenValue, int nBlueValue)
 
 {
-#ifdef __riscv_vector
+#ifdef USE_RVV
     int nBestDist = 768;
     int nBestIndex = 0;
 

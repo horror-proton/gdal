@@ -54,7 +54,7 @@
 #endif
 
 #ifdef __riscv_vector
-#include <riscv_vector.h>
+#define USE_RVV
 #include "gdalrvv.hpp"
 #endif
 
@@ -3533,7 +3533,7 @@ static double GWKCubic(double dfX)
 
 static double GWKCubic4Values(double *padfValues)
 {
-#if defined(__riscv_vector) && __riscv_v_fixed_vlen >= 256
+#if defined(USE_RVV) && __riscv_v_fixed_vlen >= 256
 
     static constexpr size_t vl = 4;
 
@@ -4559,7 +4559,7 @@ static void GWKComputeWeights(GDALResampleAlg eResample, int iMin, int iMax,
     double dfAccumulatorWeightHorizontal = cpl::NumericLimits<double>::min();
     for (; i + 2 < iMax; i += 4, iC += 4)
     {
-#ifdef __riscv_vector
+#ifdef USE_RVV
         auto res = __riscv_vfcvt_f(__riscv_vid_v_u64m1(4), 4);
         res = __riscv_vfadd(res, i - dfDeltaX, 4);
         res = __riscv_vfmul(res, dfXScale, 4);
@@ -4589,7 +4589,7 @@ static void GWKComputeWeights(GDALResampleAlg eResample, int iMin, int iMax,
     double dfAccumulatorWeightVertical = cpl::NumericLimits<double>::min();
     for (; j + 2 < jMax; j += 4, jC += 4)
     {
-#ifdef __riscv_vector
+#ifdef USE_RVV
         auto res = __riscv_vfcvt_f(__riscv_vid_v_u64m1(4), 4);
         res = __riscv_vfadd(res, j - dfDeltaY, 4);
         res = __riscv_vfmul(res, dfYScale, 4);
@@ -4722,7 +4722,7 @@ GWKResampleNoMasksT(const GDALWarpKernel *poWK, int iBand, double dfSrcX,
 
 /* We restrict to 64bit processors because they are guaranteed to have SSE2 */
 /* Could possibly be used too on 32bit, but we would need to check at runtime */
-#if defined(USE_SSE2)
+#if defined(USE_SSE2) || defined(USE_RVV)
 
 /************************************************************************/
 /*                    GWKResampleNoMasks_SSE2_T()                       */
@@ -4787,7 +4787,7 @@ static bool GWKResampleNoMasks_SSE2_T(const GDALWarpKernel *poWK, int iBand,
     }
 
     GPtrDiff_t iSampJ = iSrcOffset + static_cast<GPtrDiff_t>(jMin) * nSrcXSize;
-#ifdef __riscv_vector
+#ifdef USE_RVV
 
     static constexpr ptrdiff_t blk_height = 2;
     double dfAccumulator = 0.0;

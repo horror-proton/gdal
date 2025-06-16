@@ -113,6 +113,11 @@
 #include "emmintrin.h"
 #endif
 
+#ifdef __riscv_vector
+#define HAVE_RVV
+#include <riscv_vector.h>
+#endif
+
 #ifdef USE_NEON_OPTIMIZATIONS
 #define HAVE_16_SSE_REG
 #define HAVE_SSE2
@@ -800,7 +805,8 @@ so we get a final formula with just one transcendental function
            sqrt(1 + psData->square_z * xx_plus_yy);
 */
 
-#if defined(HAVE_SSE2) && !defined(SSE2RVV_H)  // rsqrt accuracy issue
+#if defined(HAVE_SSE2) && !defined(HAVE_RVV) &&                                \
+    !defined(SSE2RVV_H)  // rsqrt accuracy issue
 inline double ApproxADivByInvSqrtB(double a, double b)
 {
     __m128d regB = _mm_load_sd(&b);
@@ -969,7 +975,7 @@ static float GDALHillshadeAlg_same_res(const T *afWin,
     return static_cast<float>(cang);
 }
 
-#ifdef __riscv_vector
+#ifdef HAVE_RVV
 template <class T>
 static int
 GDALHillshadeAlg_same_res_multisample(const T *pafThreeLineWin, int nLine1Off,

@@ -13,7 +13,12 @@
 #include "gdalgrid.h"
 #include "gdalgrid_priv.h"
 
-#ifdef HAVE_SSE_AT_COMPILE_TIME
+#ifdef __riscv_vector
+#define HAVE_RVV
+#include <riscv_vector.h>
+#endif
+
+#if defined(HAVE_SSE_AT_COMPILE_TIME) || defined(HAVE_RVV)
 
 #ifdef USE_NEON_OPTIMIZATIONS
 #include "include_sse2neon.h"
@@ -43,7 +48,7 @@ CPLErr GDALGridInverseDistanceToAPower2NoSmoothingNoSearchSSE(
     const float fXPoint = static_cast<float>(dfXPoint);
     const float fYPoint = static_cast<float>(dfYPoint);
 
-#ifdef __riscv_vector
+#ifdef HAVE_RVV
 
     const size_t vlmax = __riscv_vsetvlmax_e32m8();
 
