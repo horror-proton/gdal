@@ -475,10 +475,6 @@ QuadraticMeanByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
 {
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint8_t *>(pSrcScanlineShiftedInOut);
-    const auto mask_even = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b10101010, __riscv_vsetvlmax_e8m1()));
-    const auto mask_odd = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b01010101, __riscv_vsetvlmax_e8m1()));
 
     const size_t vlmax = __riscv_vsetvlmax_e8m1();
 
@@ -487,24 +483,20 @@ QuadraticMeanByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
     {
         const size_t vl = vlmax;
 
-        const auto first_line =
-            __riscv_vle8_v_u8m2(pSrcScanlineShifted + 0 * nChunkXSize, vl * 2);
-        const auto second_line =
-            __riscv_vle8_v_u8m2(pSrcScanlineShifted + 1 * nChunkXSize, vl * 2);
+        const auto first_line = __riscv_vlseg2e8_v_u8m1x2(
+            pSrcScanlineShifted + 0 * nChunkXSize, vl);
+        const auto second_line = __riscv_vlseg2e8_v_u8m1x2(
+            pSrcScanlineShifted + 1 * nChunkXSize, vl);
 
-        const auto first_line_odd = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(first_line, mask_odd, vl * 2));
-        const auto first_line_even = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(first_line, mask_even, vl * 2));
+        const auto first_line_odd = __riscv_vget_u8m1(first_line, 0);
+        const auto first_line_even = __riscv_vget_u8m1(first_line, 1);
+
+        const auto second_line_odd = __riscv_vget_u8m1(second_line, 0);
+        const auto second_line_even = __riscv_vget_u8m1(second_line, 1);
 
         const auto first_line_sum_square = __riscv_vwaddu_vv(
             __riscv_vwmulu(first_line_odd, first_line_odd, vl),
             __riscv_vwmulu(first_line_even, first_line_even, vl), vl);
-
-        const auto second_line_odd = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(second_line, mask_odd, vl * 2));
-        const auto second_line_even = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(second_line, mask_even, vl * 2));
 
         const auto second_line_sum_square = __riscv_vwaddu_vv(
             __riscv_vwmulu(second_line_odd, second_line_odd, vl),
@@ -639,35 +631,26 @@ AverageByteSSE2OrAVX2(int nDstXWidth, int nChunkXSize,
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint8_t *>(pSrcScanlineShiftedInOut);
 
-    const auto mask_even = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b10101010, __riscv_vsetvlmax_e8m1()));
-    const auto mask_odd = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b01010101, __riscv_vsetvlmax_e8m1()));
-
-    const size_t vlmax = __riscv_vsetvlmax_e8m1();
+    const size_t vlmax = __riscv_vsetvlmax_e8m4();
 
     int iDstPixel = 0;
     for (; iDstPixel < nDstXWidth - (static_cast<int>(vlmax) - 1);)
     {
         const size_t vl = vlmax;
 
-        const auto first_line =
-            __riscv_vle8_v_u8m2(pSrcScanlineShifted + 0 * nChunkXSize, vl * 2);
-        const auto second_line =
-            __riscv_vle8_v_u8m2(pSrcScanlineShifted + 1 * nChunkXSize, vl * 2);
+        const auto first_line = __riscv_vlseg2e8_v_u8m4x2(
+            pSrcScanlineShifted + 0 * nChunkXSize, vl);
+        const auto second_line = __riscv_vlseg2e8_v_u8m4x2(
+            pSrcScanlineShifted + 1 * nChunkXSize, vl);
 
-        const auto first_line_odd = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(first_line, mask_odd, vl * 2));
-        const auto first_line_even = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(first_line, mask_even, vl * 2));
+        const auto first_line_odd = __riscv_vget_u8m4(first_line, 0);
+        const auto first_line_even = __riscv_vget_u8m4(first_line, 1);
+
+        const auto second_line_odd = __riscv_vget_u8m4(second_line, 0);
+        const auto second_line_even = __riscv_vget_u8m4(second_line, 1);
 
         const auto first_line_sum =
             __riscv_vwaddu_vv(first_line_odd, first_line_even, vl);
-
-        const auto second_line_odd = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(second_line, mask_odd, vl * 2));
-        const auto second_line_even = __riscv_vlmul_trunc_u8m1(
-            __riscv_vcompress(second_line, mask_even, vl * 2));
 
         const auto second_line_sum =
             __riscv_vwaddu_vv(second_line_odd, second_line_even, vl);
@@ -795,11 +778,6 @@ QuadraticMeanUInt16SSE2(int nDstXWidth, int nChunkXSize,
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint16_t *>(pSrcScanlineShiftedInOut);
 
-    const auto mask_even = __riscv_vreinterpret_b8(
-        __riscv_vmv_v_x_u8m1(0b10101010, __riscv_vsetvlmax_e8m1()));
-    const auto mask_odd = __riscv_vreinterpret_b8(
-        __riscv_vmv_v_x_u8m1(0b01010101, __riscv_vsetvlmax_e8m1()));
-
     const size_t vlmax = __riscv_vsetvlmax_e16m1();
 
     int iDstPixel = 0;
@@ -807,24 +785,20 @@ QuadraticMeanUInt16SSE2(int nDstXWidth, int nChunkXSize,
     {
         const size_t vl = vlmax;
 
-        const auto first_line = __riscv_vle16_v_u16m2(
-            pSrcScanlineShifted + 0 * nChunkXSize, vl * 2);
-        const auto second_line = __riscv_vle16_v_u16m2(
-            pSrcScanlineShifted + 1 * nChunkXSize, vl * 2);
+        const auto first_line = __riscv_vlseg2e16_v_u16m1x2(
+            pSrcScanlineShifted + 0 * nChunkXSize, vl);
+        const auto second_line = __riscv_vlseg2e16_v_u16m1x2(
+            pSrcScanlineShifted + 1 * nChunkXSize, vl);
 
-        const auto first_line_odd = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(first_line, mask_odd, vl * 2));
-        const auto first_line_even = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(first_line, mask_even, vl * 2));
+        const auto first_line_odd = __riscv_vget_u16m1(first_line, 0);
+        const auto first_line_even = __riscv_vget_u16m1(first_line, 1);
+
+        const auto second_line_odd = __riscv_vget_u16m1(second_line, 0);
+        const auto second_line_even = __riscv_vget_u16m1(second_line, 1);
 
         const auto first_line_sum_square = __riscv_vwaddu_vv(
             __riscv_vwmulu(first_line_odd, first_line_odd, vl),
             __riscv_vwmulu(first_line_even, first_line_even, vl), vl);
-
-        const auto second_line_odd = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(second_line, mask_odd, vl * 2));
-        const auto second_line_even = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(second_line, mask_even, vl * 2));
 
         const auto second_lind_sum_square = __riscv_vwaddu_vv(
             __riscv_vwmulu(second_line_odd, second_line_odd, vl),
@@ -1080,11 +1054,6 @@ static int AverageUInt16SSE2(int nDstXWidth, int nChunkXSize,
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const uint16_t *>(pSrcScanlineShiftedInOut);
 
-    const auto mask_even = __riscv_vreinterpret_b8(
-        __riscv_vmv_v_x_u8m1(0b10101010, __riscv_vsetvlmax_e8m1()));
-    const auto mask_odd = __riscv_vreinterpret_b8(
-        __riscv_vmv_v_x_u8m1(0b01010101, __riscv_vsetvlmax_e8m1()));
-
     const size_t vlmax = __riscv_vsetvlmax_e16m1();
 
     int iDstPixel = 0;
@@ -1092,23 +1061,19 @@ static int AverageUInt16SSE2(int nDstXWidth, int nChunkXSize,
     {
         const size_t vl = vlmax;
 
-        const auto first_line = __riscv_vle16_v_u16m2(
-            pSrcScanlineShifted + (0 * nChunkXSize), vl * 2);
-        const auto second_line = __riscv_vle16_v_u16m2(
-            pSrcScanlineShifted + (1 * nChunkXSize), vl * 2);
+        const auto first_line = __riscv_vlseg2e16_v_u16m1x2(
+            pSrcScanlineShifted + 0 * nChunkXSize, vl);
+        const auto second_line = __riscv_vlseg2e16_v_u16m1x2(
+            pSrcScanlineShifted + 1 * nChunkXSize, vl);
 
-        const auto first_line_odd = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(first_line, mask_odd, vl * 2));
-        const auto first_line_even = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(first_line, mask_even, vl * 2));
+        const auto first_line_odd = __riscv_vget_u16m1(first_line, 0);
+        const auto first_line_even = __riscv_vget_u16m1(first_line, 1);
+
+        const auto second_line_odd = __riscv_vget_u16m1(second_line, 0);
+        const auto second_line_even = __riscv_vget_u16m1(second_line, 1);
 
         const auto first_line_sum =
             __riscv_vwaddu_vv(first_line_odd, first_line_even, vl);
-
-        const auto second_line_odd = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(second_line, mask_odd, vl * 2));
-        const auto second_line_even = __riscv_vlmul_trunc_u16m1(
-            __riscv_vcompress(second_line, mask_even, vl * 2));
 
         const auto second_line_sum =
             __riscv_vwaddu_vv(second_line_odd, second_line_even, vl);
@@ -1289,11 +1254,6 @@ QuadraticMeanFloatSSE2(int nDstXWidth, int nChunkXSize,
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const float *>(pSrcScanlineShiftedInOut);
 
-    const auto mask_even = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b10101010, __riscv_vsetvlmax_e8m1()));
-    const auto mask_odd = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b01010101, __riscv_vsetvlmax_e8m1()));
-
     const size_t vlmax = __riscv_vsetvlmax_e32m4();
 
     int iDstPixel = 0;
@@ -1301,20 +1261,16 @@ QuadraticMeanFloatSSE2(int nDstXWidth, int nChunkXSize,
     {
         const size_t vl = vlmax;
 
-        const auto first_line = __riscv_vle32_v_f32m8(
-            pSrcScanlineShifted + (0 * nChunkXSize), vl * 2);
-        const auto second_line = __riscv_vle32_v_f32m8(
-            pSrcScanlineShifted + (1 * nChunkXSize), vl * 2);
+        const auto first_line = __riscv_vlseg2e32_v_f32m4x2(
+            pSrcScanlineShifted + (0 * nChunkXSize), vl);
+        const auto second_line = __riscv_vlseg2e32_v_f32m4x2(
+            pSrcScanlineShifted + (1 * nChunkXSize), vl);
 
-        auto first_line_odd = __riscv_vlmul_trunc_f32m4(
-            __riscv_vcompress(first_line, mask_odd, vl * 2));
-        auto first_line_even = __riscv_vlmul_trunc_f32m4(
-            __riscv_vcompress(first_line, mask_even, vl * 2));
+        auto first_line_odd = __riscv_vget_f32m4(first_line, 0);
+        auto first_line_even = __riscv_vget_f32m4(first_line, 1);
 
-        auto second_line_odd = __riscv_vlmul_trunc_f32m4(
-            __riscv_vcompress(second_line, mask_odd, vl * 2));
-        auto second_line_even = __riscv_vlmul_trunc_f32m4(
-            __riscv_vcompress(second_line, mask_even, vl * 2));
+        auto second_line_odd = __riscv_vget_f32m4(second_line, 0);
+        auto second_line_even = __riscv_vget_f32m4(second_line, 1);
 
         const auto max_v = __riscv_vfmax(
             __riscv_vfmax(first_line_odd, first_line_even, vl),
@@ -1466,11 +1422,6 @@ static int AverageFloatSSE2(int nDstXWidth, int nChunkXSize,
     const auto *CPL_RESTRICT pSrcScanlineShifted =
         reinterpret_cast<const float *>(pSrcScanlineShiftedInOut);
 
-    const auto mask_even = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b10101010, __riscv_vsetvlmax_e8m1()));
-    const auto mask_odd = __riscv_vreinterpret_b4(
-        __riscv_vmv_v_x_u8m1(0b01010101, __riscv_vsetvlmax_e8m1()));
-
     const size_t vlmax = __riscv_vsetvlmax_e32m4();
 
     int iDstPixel = 0;
@@ -1478,17 +1429,19 @@ static int AverageFloatSSE2(int nDstXWidth, int nChunkXSize,
     {
         const size_t vl = vlmax;
 
-        const auto first_line = __riscv_vle32_v_f32m8(
-            pSrcScanlineShifted + 0 * nChunkXSize, vl * 2);
-        const auto second_line = __riscv_vle32_v_f32m8(
-            pSrcScanlineShifted + 1 * nChunkXSize, vl * 2);
+        const auto first_line = __riscv_vlseg2e32_v_f32m4x2(
+            pSrcScanlineShifted + (0 * nChunkXSize), vl);
+        const auto second_line = __riscv_vlseg2e32_v_f32m4x2(
+            pSrcScanlineShifted + (1 * nChunkXSize), vl);
 
-        const auto vsum = __riscv_vfadd(first_line, second_line, vl * 2);
+        auto first_line_odd = __riscv_vget_f32m4(first_line, 0);
+        auto first_line_even = __riscv_vget_f32m4(first_line, 1);
 
-        const auto odd = __riscv_vlmul_trunc_f32m4(
-            __riscv_vcompress(vsum, mask_odd, vl * 2));
-        const auto even = __riscv_vlmul_trunc_f32m4(
-            __riscv_vcompress(vsum, mask_even, vl * 2));
+        auto second_line_odd = __riscv_vget_f32m4(second_line, 0);
+        auto second_line_even = __riscv_vget_f32m4(second_line, 1);
+
+        const auto odd = __riscv_vfadd(first_line_odd, second_line_odd, vl);
+        const auto even = __riscv_vfadd(first_line_even, second_line_even, vl);
 
         const auto sum = __riscv_vfadd(odd, even, vl);
 
