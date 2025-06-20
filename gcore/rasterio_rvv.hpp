@@ -328,6 +328,70 @@ inline void deinterleave_4byte(const uint8_t *__restrict pabySrc,
     }
 }
 
+// TODO: use template metaprogramming to generate these functions
+
+inline void interleave_2byte(const uint8_t *__restrict pSrc,
+                             uint8_t *__restrict pDst, size_t nIters)
+{
+    for (size_t i = 0; i < nIters;)
+    {
+        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
+        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
+        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
+        const auto v = __riscv_vcreate_v_u8m1x2(v0, v1);
+        __riscv_vsseg2e8(pDst + i, v, vl);
+        i += vl;
+    }
+}
+
+inline void interleave_3byte(const uint8_t *__restrict pSrc,
+                             uint8_t *__restrict pDst, size_t nIters)
+{
+    for (size_t i = 0; i < nIters;)
+    {
+        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
+        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
+        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
+        const auto v2 = __riscv_vle8_v_u8m1(pSrc + 2 * nIters + i, vl);
+        const auto v = __riscv_vcreate_v_u8m1x3(v0, v1, v2);
+        __riscv_vsseg3e8(pDst + i, v, vl);
+        i += vl;
+    }
+}
+
+inline void interleave_4byte(const uint8_t *__restrict pSrc,
+                             uint8_t *__restrict pDst, size_t nIters)
+{
+    for (size_t i = 0; i < nIters;)
+    {
+        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
+        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
+        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
+        const auto v2 = __riscv_vle8_v_u8m1(pSrc + 2 * nIters + i, vl);
+        const auto v3 = __riscv_vle8_v_u8m1(pSrc + 3 * nIters + i, vl);
+        const auto v = __riscv_vcreate_v_u8m1x4(v0, v1, v2, v3);
+        __riscv_vsseg4e8(pDst + i, v, vl);
+        i += vl;
+    }
+}
+
+inline void interleave_5byte(const uint8_t *__restrict pSrc,
+                             uint8_t *__restrict pDst, size_t nIters)
+{
+    for (size_t i = 0; i < nIters;)
+    {
+        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
+        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
+        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
+        const auto v2 = __riscv_vle8_v_u8m1(pSrc + 2 * nIters + i, vl);
+        const auto v3 = __riscv_vle8_v_u8m1(pSrc + 3 * nIters + i, vl);
+        const auto v4 = __riscv_vle8_v_u8m1(pSrc + 4 * nIters + i, vl);
+        const auto v = __riscv_vcreate_v_u8m1x5(v0, v1, v2, v3, v4);
+        __riscv_vsseg5e8(pDst + i, v, vl);
+        i += vl;
+    }
+}
+
 template <ptrdiff_t Stride>
 inline void unroll_copy_s_1(uint8_t *__restrict out,
                             const uint8_t *__restrict in, ptrdiff_t n)
@@ -368,6 +432,65 @@ inline void unrolled_copy(T *__restrict dst, const T *__restrict src,
         src += vl * SrcStride;
         dst += vl * DstStride;
         n -= vl;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace detail
+{
+
+// TODO: impl other types with template metaprogramming?
+
+inline void transpose_2d_byte_8u_8xvl(const uint8_t *__restrict src,
+                                      uint8_t *__restrict dst, size_t sstep,
+                                      size_t dstep, size_t vl)
+{
+    const auto v0 = __riscv_vle8_v_u8m1(src + (0 * sstep), vl);
+    const auto v1 = __riscv_vle8_v_u8m1(src + (1 * sstep), vl);
+    const auto v2 = __riscv_vle8_v_u8m1(src + (2 * sstep), vl);
+    const auto v3 = __riscv_vle8_v_u8m1(src + (3 * sstep), vl);
+    const auto v4 = __riscv_vle8_v_u8m1(src + (4 * sstep), vl);
+    const auto v5 = __riscv_vle8_v_u8m1(src + (5 * sstep), vl);
+    const auto v6 = __riscv_vle8_v_u8m1(src + (6 * sstep), vl);
+    const auto v7 = __riscv_vle8_v_u8m1(src + (7 * sstep), vl);
+
+    const auto v = __riscv_vcreate_v_u8m1x8(v0, v1, v2, v3, v4, v5, v6, v7);
+    __riscv_vssseg8e8(dst, dstep, v, vl);
+}
+
+}  // namespace detail
+
+inline void transpose_2d_byte(const uint8_t *__restrict src, uint8_t *dst,
+                              size_t src_width, size_t src_height)
+{
+    size_t h = 0;
+
+    for (; h + 8 <= src_height; h += 8)
+    {
+        const uint8_t *s = src + h * src_width;
+        uint8_t *d = dst + h;
+        for (size_t w = 0; w < src_width;)
+        {
+            const size_t vl = __riscv_vsetvl_e8m1(src_width - w);
+            detail::transpose_2d_byte_8u_8xvl(s + w, d + w * src_height,
+                                              src_width, src_height, vl);
+            w += vl;
+        }
+    }
+
+    for (; h < src_height; ++h)
+    {
+        const uint8_t *s = src + h * src_width;
+        uint8_t *d = dst + h;
+
+        for (size_t w = 0; w < src_width;)
+        {
+            const size_t vl = __riscv_vsetvl_e8m1(src_width - w);
+            auto v = __riscv_vle8_v_u8m1(s + w, vl);
+            __riscv_vsse8(d + w * src_height, src_height, v, vl);
+            w += vl;
+        }
     }
 }
 

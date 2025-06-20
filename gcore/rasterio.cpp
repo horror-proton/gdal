@@ -5980,7 +5980,15 @@ static void GDALTranspose2D(const void *pSrc, GDALDataType eSrcType, DST *pDst,
 /*                      GDALInterleave2Byte()                           */
 /************************************************************************/
 
-#if defined(HAVE_SSE2) &&                                                      \
+#if defined(HAVE_RVV)
+
+static void GDALInterleave2Byte(const uint8_t *CPL_RESTRICT pSrc,
+                                uint8_t *CPL_RESTRICT pDst, size_t nIters)
+{
+    return rasterio_rvv::interleave_2byte(pSrc, pDst, nIters);
+}
+
+#elif defined(HAVE_SSE2) &&                                                    \
     (!defined(__GNUC__) || defined(__INTEL_CLANG_COMPILER))
 
 // ICC autovectorizer doesn't do a good job at generating good SSE code,
@@ -6186,8 +6194,29 @@ void GDALTranspose2D(const void *pSrc, GDALDataType eSrcType, void *pDst,
                                 static_cast<uint8_t *>(pDst), nSrcWidth);
             return;
         }
-#if (defined(HAVE_SSSE3_AT_COMPILE_TIME) &&                                    \
-     (defined(__x86_64) || defined(_M_X64)))
+#ifdef HAVE_RVV
+        if (nSrcHeight == 3)
+        {
+            rasterio_rvv::interleave_3byte(static_cast<const uint8_t *>(pSrc),
+                                           static_cast<uint8_t *>(pDst),
+                                           nSrcWidth);
+            return;
+        }
+        if (nSrcHeight == 5)
+        {
+            rasterio_rvv::interleave_5byte(static_cast<const uint8_t *>(pSrc),
+                                           static_cast<uint8_t *>(pDst),
+                                           nSrcWidth);
+            return;
+        }
+        {
+            rasterio_rvv::transpose_2d_byte(static_cast<const uint8_t *>(pSrc),
+                                            static_cast<uint8_t *>(pDst),
+                                            nSrcWidth, nSrcHeight);
+            return;
+        }
+#elif (defined(HAVE_SSSE3_AT_COMPILE_TIME) &&                                  \
+       (defined(__x86_64) || defined(_M_X64)))
         if (CPLHaveRuntimeSSSE3())
         {
             GDALTranspose2D_Byte_SSSE3(static_cast<const uint8_t *>(pSrc),
