@@ -37,15 +37,56 @@ using size_to_uint = std::conditional_t<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename T, int LOGM> struct rvv_helper;
+template <typename T, int LOGM, size_t NFIELD = 1> struct rvv_helper;
+
+#define RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, NFIELD)               \
+    template <> struct rvv_helper<T, LOGM, NFIELD>                             \
+    {                                                                          \
+        using type = v##NAME##EMUL##x##NFIELD##_t;                             \
+        using non_tuple_type = v##NAME##EMUL##_t;                              \
+        static constexpr size_t nfield = NFIELD;                               \
+        template <typename... Args> static type create(Args... args)           \
+        {                                                                      \
+            return __riscv_vcreate_v_##EEW##EMUL##x##NFIELD(args...);          \
+        }                                                                      \
+        static void sseg(T *base, type v, size_t vl)                           \
+        {                                                                      \
+            __riscv_vsseg##NFIELD##e##SIZE(base, v, vl);                       \
+        }                                                                      \
+    }
+
+#define RVV_HELPER_TUPLE_m8(T, NAME, SIZE, EEW, EMUL, LOGM) static_assert(true)
+
+#define RVV_HELPER_TUPLE_m4(T, NAME, SIZE, EEW, EMUL, LOGM)                    \
+    RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, 2)
+
+#define RVV_HELPER_TUPLE_m2(T, NAME, SIZE, EEW, EMUL, LOGM)                    \
+    RVV_HELPER_TUPLE_m4(T, NAME, SIZE, EEW, EMUL, LOGM);                       \
+    RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, 3);                       \
+    RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, 4)
+
+#define RVV_HELPER_TUPLE_m1(T, NAME, SIZE, EEW, EMUL, LOGM)                    \
+    RVV_HELPER_TUPLE_m2(T, NAME, SIZE, EEW, EMUL, LOGM);                       \
+    RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, 5);                       \
+    RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, 6);                       \
+    RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, 7);                       \
+    RVV_HELPER_TUPLE(T, NAME, SIZE, EEW, EMUL, LOGM, 8)
+
+#define RVV_HELPER_TUPLE_mf2 RVV_HELPER_TUPLE_m1
+#define RVV_HELPER_TUPLE_mf4 RVV_HELPER_TUPLE_m1
+#define RVV_HELPER_TUPLE_mf8 RVV_HELPER_TUPLE_m1
 
 #define RVV_HELPER(T, NAME, SIZE, EEW, EMUL, LOGM)                             \
-    template <> struct rvv_helper<T, LOGM>                                     \
+    template <> struct rvv_helper<T, LOGM, 1>                                  \
     {                                                                          \
         using type = v##NAME##EMUL##_t;                                        \
         static size_t setvl(size_t n)                                          \
         {                                                                      \
             return __riscv_vsetvl_e##SIZE##EMUL(n);                            \
+        }                                                                      \
+        static size_t setvlmax()                                               \
+        {                                                                      \
+            return __riscv_vsetvlmax_e##SIZE##EMUL();                          \
         }                                                                      \
         static type le(const T *ptr, size_t vl)                                \
         {                                                                      \
@@ -59,7 +100,8 @@ template <typename T, int LOGM> struct rvv_helper;
         {                                                                      \
             return __riscv_vreinterpret_##EEW##EMUL(src);                      \
         }                                                                      \
-    }
+    };                                                                         \
+    RVV_HELPER_TUPLE_##EMUL(T, NAME, SIZE, EEW, EMUL, LOGM)
 
 RVV_HELPER(uint8_t, uint8, 8, u8, mf8, -3);
 RVV_HELPER(uint8_t, uint8, 8, u8, mf4, -2);

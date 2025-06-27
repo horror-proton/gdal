@@ -3,6 +3,7 @@
 
 #include <riscv_vector.h>
 #include <limits>
+#include <utility>
 
 #include "gdalrvv.hpp"
 
@@ -329,67 +330,42 @@ inline void deinterleave_4byte(const uint8_t *__restrict pabySrc,
 }
 
 // TODO: use template metaprogramming to generate these functions
-
-inline void interleave_2byte(const uint8_t *__restrict pSrc,
-                             uint8_t *__restrict pDst, size_t nIters)
+namespace detail
 {
+template <typename Scalar, int Logm, size_t Nfields, size_t... I>
+inline void interleave_impl(const Scalar *__restrict pSrc,
+                            Scalar *__restrict pDst, size_t nIters,
+                            std::index_sequence<I...>)
+{
+#pragma GCC unroll 2
     for (size_t i = 0; i < nIters;)
     {
-        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
-        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
-        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
-        const auto v = __riscv_vcreate_v_u8m1x2(v0, v1);
-        __riscv_vsseg2e8(pDst + i, v, vl);
+        using helper = gdalrvv::rvv_helper<Scalar, Logm, Nfields>;
+        using helper_non_tuple = gdalrvv::rvv_helper<Scalar, Logm>;
+        const size_t vl = helper_non_tuple::setvl(nIters - i);
+
+        /*
+        v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
+        v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
+        ...
+        v = __riscv_vcreate_v_u8m1xN(v0, v1, ...);
+        */
+
+        const auto v = helper::create(
+            helper_non_tuple::le(pSrc + (I * nIters) + i, vl)...);
+
+        helper::sseg(pDst + i, v, vl);
         i += vl;
     }
 }
+}  // namespace detail
 
-inline void interleave_3byte(const uint8_t *__restrict pSrc,
-                             uint8_t *__restrict pDst, size_t nIters)
+template <size_t Nfields, int Logm = 0, typename Scalar>
+inline void interleave(const Scalar *__restrict pSrc, Scalar *__restrict pDst,
+                       size_t nIters)
 {
-    for (size_t i = 0; i < nIters;)
-    {
-        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
-        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
-        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
-        const auto v2 = __riscv_vle8_v_u8m1(pSrc + 2 * nIters + i, vl);
-        const auto v = __riscv_vcreate_v_u8m1x3(v0, v1, v2);
-        __riscv_vsseg3e8(pDst + i, v, vl);
-        i += vl;
-    }
-}
-
-inline void interleave_4byte(const uint8_t *__restrict pSrc,
-                             uint8_t *__restrict pDst, size_t nIters)
-{
-    for (size_t i = 0; i < nIters;)
-    {
-        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
-        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
-        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
-        const auto v2 = __riscv_vle8_v_u8m1(pSrc + 2 * nIters + i, vl);
-        const auto v3 = __riscv_vle8_v_u8m1(pSrc + 3 * nIters + i, vl);
-        const auto v = __riscv_vcreate_v_u8m1x4(v0, v1, v2, v3);
-        __riscv_vsseg4e8(pDst + i, v, vl);
-        i += vl;
-    }
-}
-
-inline void interleave_5byte(const uint8_t *__restrict pSrc,
-                             uint8_t *__restrict pDst, size_t nIters)
-{
-    for (size_t i = 0; i < nIters;)
-    {
-        const size_t vl = __riscv_vsetvl_e8m1(nIters - i);
-        const auto v0 = __riscv_vle8_v_u8m1(pSrc + 0 * nIters + i, vl);
-        const auto v1 = __riscv_vle8_v_u8m1(pSrc + 1 * nIters + i, vl);
-        const auto v2 = __riscv_vle8_v_u8m1(pSrc + 2 * nIters + i, vl);
-        const auto v3 = __riscv_vle8_v_u8m1(pSrc + 3 * nIters + i, vl);
-        const auto v4 = __riscv_vle8_v_u8m1(pSrc + 4 * nIters + i, vl);
-        const auto v = __riscv_vcreate_v_u8m1x5(v0, v1, v2, v3, v4);
-        __riscv_vsseg5e8(pDst + i, v, vl);
-        i += vl;
-    }
+    return detail::interleave_impl<Scalar, Logm, Nfields>(
+        pSrc, pDst, nIters, std::make_index_sequence<Nfields>{});
 }
 
 template <ptrdiff_t Stride>

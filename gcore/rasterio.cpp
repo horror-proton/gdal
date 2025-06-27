@@ -5985,7 +5985,7 @@ static void GDALTranspose2D(const void *pSrc, GDALDataType eSrcType, DST *pDst,
 static void GDALInterleave2Byte(const uint8_t *CPL_RESTRICT pSrc,
                                 uint8_t *CPL_RESTRICT pDst, size_t nIters)
 {
-    return rasterio_rvv::interleave_2byte(pSrc, pDst, nIters);
+    return rasterio_rvv::interleave<2, -1>(pSrc, pDst, nIters);
 }
 
 #elif defined(HAVE_SSE2) &&                                                    \
@@ -6060,7 +6060,14 @@ GDALInterleave2Byte(const uint8_t *CPL_RESTRICT pSrc,
 /*                      GDALInterleave4Byte()                           */
 /************************************************************************/
 
-#if defined(HAVE_SSE2) &&                                                      \
+#if defined(HAVE_RVV)
+static void GDALInterleave4Byte(const uint8_t *CPL_RESTRICT pSrc,
+                                uint8_t *CPL_RESTRICT pDst, size_t nIters)
+{
+    return rasterio_rvv::interleave<4>(pSrc, pDst, nIters);
+}
+
+#elif defined(HAVE_SSE2) &&                                                    \
     (!defined(__GNUC__) || defined(__INTEL_CLANG_COMPILER))
 
 // ICC autovectorizer doesn't do a good job at generating good SSE code,
@@ -6195,25 +6202,28 @@ void GDALTranspose2D(const void *pSrc, GDALDataType eSrcType, void *pDst,
             return;
         }
 #ifdef HAVE_RVV
-        if (nSrcHeight == 3)
+        const auto *s = static_cast<const uint8_t *>(pSrc);
+        auto *d = static_cast<uint8_t *>(pDst);
+        switch (nSrcHeight)
         {
-            rasterio_rvv::interleave_3byte(static_cast<const uint8_t *>(pSrc),
-                                           static_cast<uint8_t *>(pDst),
-                                           nSrcWidth);
-            return;
-        }
-        if (nSrcHeight == 5)
-        {
-            rasterio_rvv::interleave_5byte(static_cast<const uint8_t *>(pSrc),
-                                           static_cast<uint8_t *>(pDst),
-                                           nSrcWidth);
-            return;
-        }
-        {
-            rasterio_rvv::transpose_2d_byte(static_cast<const uint8_t *>(pSrc),
-                                            static_cast<uint8_t *>(pDst),
-                                            nSrcWidth, nSrcHeight);
-            return;
+            case 3:
+                rasterio_rvv::interleave<3>(s, d, nSrcWidth);
+                return;
+            case 5:
+                rasterio_rvv::interleave<5>(s, d, nSrcWidth);
+                return;
+            case 6:
+                rasterio_rvv::interleave<6>(s, d, nSrcWidth);
+                return;
+            case 7:
+                rasterio_rvv::interleave<7>(s, d, nSrcWidth);
+                return;
+            case 8:
+                rasterio_rvv::interleave<8>(s, d, nSrcWidth);
+                return;
+            default:
+                rasterio_rvv::transpose_2d_byte(s, d, nSrcWidth, nSrcHeight);
+                return;
         }
 #elif (defined(HAVE_SSSE3_AT_COMPILE_TIME) &&                                  \
        (defined(__x86_64) || defined(_M_X64)))
