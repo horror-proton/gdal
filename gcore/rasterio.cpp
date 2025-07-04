@@ -5465,7 +5465,18 @@ GDALDeinterleave3Byte(const GByte *CPL_RESTRICT pabySrc,
 /*                    GDALDeinterleave4Byte()                           */
 /************************************************************************/
 
-#if !defined(__GNUC__) || defined(__clang__)
+#ifdef HAVE_RVV
+static void GDALDeinterleave4Byte(const GByte *CPL_RESTRICT pabySrc,
+                                  GByte *CPL_RESTRICT pabyDest0,
+                                  GByte *CPL_RESTRICT pabyDest1,
+                                  GByte *CPL_RESTRICT pabyDest2,
+                                  GByte *CPL_RESTRICT pabyDest3, size_t nIters)
+{
+    return rasterio_rvv::deinterleave_4byte(pabySrc, pabyDest0, pabyDest1,
+                                            pabyDest2, pabyDest3, nIters);
+}
+
+#elif !defined(__GNUC__) || defined(__clang__)
 
 /************************************************************************/
 /*                         deinterleave()                               */
@@ -5515,12 +5526,7 @@ static void GDALDeinterleave4Byte(const GByte *CPL_RESTRICT pabySrc,
                                   GByte *CPL_RESTRICT pabyDest1,
                                   GByte *CPL_RESTRICT pabyDest2,
                                   GByte *CPL_RESTRICT pabyDest3, size_t nIters)
-#ifdef HAVE_RVV
-{
-    return rasterio_rvv::deinterleave_4byte(pabySrc, pabyDest0, pabyDest1,
-                                            pabyDest2, pabyDest3, nIters);
-}
-#elif defined(USE_NEON_OPTIMIZATIONS)
+#ifdef USE_NEON_OPTIMIZATIONS
 {
     return GDALDeinterleave4Byte_SSSE3(pabySrc, pabyDest0, pabyDest1, pabyDest2,
                                        pabyDest3, nIters);
