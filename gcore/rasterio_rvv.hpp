@@ -302,6 +302,53 @@ inline void deinterleave_3byte(const uint8_t *__restrict pabySrc,
     }
 }
 
+inline void deinterleave_3_16b(const uint16_t *__restrict pabySrc,
+                               uint16_t *__restrict pabyDest0,
+                               uint16_t *__restrict pabyDest1,
+                               uint16_t *__restrict pabyDest2, size_t nIters)
+{
+    for (; nIters > 0;)
+    {
+        const size_t vl = __riscv_vsetvl_e16m2(nIters);
+        const auto vx3 = __riscv_vlseg3e16_v_u16m2x3(pabySrc, vl);
+        __riscv_vse16(pabyDest0, __riscv_vget_u16m2(vx3, 0), vl);
+        __riscv_vse16(pabyDest1, __riscv_vget_u16m2(vx3, 1), vl);
+        __riscv_vse16(pabyDest2, __riscv_vget_u16m2(vx3, 2), vl);
+
+        nIters -= vl;
+
+        pabySrc += 3 * vl;
+        pabyDest0 += vl;
+        pabyDest1 += vl;
+        pabyDest2 += vl;
+    }
+}
+
+inline void deinterleave_4_16b(const uint16_t *__restrict pabySrc,
+                               uint16_t *__restrict pabyDest0,
+                               uint16_t *__restrict pabyDest1,
+                               uint16_t *__restrict pabyDest2,
+                               uint16_t *__restrict pabyDest3, size_t nIters)
+{
+    for (; nIters > 0;)
+    {
+        const size_t vl = __riscv_vsetvl_e16m2(nIters);
+        const auto vx4 = __riscv_vlseg4e16_v_u16m2x4(pabySrc, vl);
+        __riscv_vse16(pabyDest0, __riscv_vget_u16m2(vx4, 0), vl);
+        __riscv_vse16(pabyDest1, __riscv_vget_u16m2(vx4, 1), vl);
+        __riscv_vse16(pabyDest2, __riscv_vget_u16m2(vx4, 2), vl);
+        __riscv_vse16(pabyDest3, __riscv_vget_u16m2(vx4, 3), vl);
+
+        nIters -= vl;
+
+        pabySrc += 4 * vl;
+        pabyDest0 += vl;
+        pabyDest1 += vl;
+        pabyDest2 += vl;
+        pabyDest3 += vl;
+    }
+}
+
 inline void deinterleave_4byte(const uint8_t *__restrict pabySrc,
                                uint8_t *__restrict pabyDest0,
                                uint8_t *__restrict pabyDest1,

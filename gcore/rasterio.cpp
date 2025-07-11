@@ -5706,6 +5706,32 @@ void GDALDeinterleave(const void *pSourceBuffer, GDALDataType eSourceDT,
                 return;
             }
         }
+
+#ifdef HAVE_RVV
+        if (eSourceDT == GDT_UInt16 || eSourceDT == GDT_Int16)
+        {
+            if (nComponents == 3)
+            {
+                rasterio_rvv::deinterleave_3_16b(
+                    static_cast<const GUInt16 *>(pSourceBuffer),
+                    static_cast<GUInt16 *>(ppDestBuffer[0]),
+                    static_cast<GUInt16 *>(ppDestBuffer[1]),
+                    static_cast<GUInt16 *>(ppDestBuffer[2]), nIters);
+                return;
+            }
+            if (nComponents == 4)
+            {
+                rasterio_rvv::deinterleave_4_16b(
+                    static_cast<const GUInt16 *>(pSourceBuffer),
+                    static_cast<GUInt16 *>(ppDestBuffer[0]),
+                    static_cast<GUInt16 *>(ppDestBuffer[1]),
+                    static_cast<GUInt16 *>(ppDestBuffer[2]),
+                    static_cast<GUInt16 *>(ppDestBuffer[3]), nIters);
+                return;
+            }
+        }
+#endif
+
 #if ((defined(__GNUC__) && !defined(__clang__)) ||                             \
      defined(__INTEL_CLANG_COMPILER)) &&                                       \
     defined(HAVE_SSE2) && defined(HAVE_SSSE3_AT_COMPILE_TIME)
